@@ -69,6 +69,7 @@ public class AiHealthResult {
         return text.substring(start, end).trim();
     }
 
+    // P1-4：三段必须齐全
     public boolean hasThreeSections() {
         return dietAdvice != null && !dietAdvice.isEmpty()
                 && exerciseAdvice != null && !exerciseAdvice.isEmpty()
@@ -79,7 +80,16 @@ public class AiHealthResult {
         return success && code.equals(SUCCESS) && hasThreeSections();
     }
 
-    // ---- getters and setters ----
+    // P1-5：解析 usage
+    public void parseUsage(org.json.JSONObject usageJson) {
+        if (usageJson == null) return;
+        this.usage = new Usage();
+        this.usage.setPromptTokens(usageJson.optInt("prompt_tokens", 0));
+        this.usage.setCompletionTokens(usageJson.optInt("completion_tokens", 0));
+        this.usage.setTotalTokens(usageJson.optInt("total_tokens", 0));
+    }
+
+    // getters/setters
     public boolean isSuccess() { return success; }
     public void setSuccess(boolean success) { this.success = success; }
     public String getCode() { return code; }
