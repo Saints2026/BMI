@@ -15,5 +15,10 @@ db-config.properties
 .DS_Store
 Thumbs.db
 # WorkBuddy缓存
+<<<<<<< HEAD
 .codebuddy/tmp
 ai-key.properties
+=======
+.codebuddy/tmplib/*.jar
+lib/javafx/*.jar
+>>>>>>> a9701724c795d31090f8e85919d5f7c77bbeb17d
