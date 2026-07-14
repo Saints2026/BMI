@@ -3,22 +3,23 @@ target/
 out/
 bin/
 *.class
+
 # IDE配置
 .idea/
 .vscode/
 *.iml
 *.launch
+
 # 本地密钥、数据库配置、日志
 *.log
 db-config.properties
+ai-key.properties
+
 # 系统缓存
 .DS_Store
 Thumbs.db
+
 # WorkBuddy缓存
-<<<<<<< HEAD
 .codebuddy/tmp
-ai-key.properties
-=======
 .codebuddy/tmplib/*.jar
 lib/javafx/*.jar
->>>>>>> a9701724c795d31090f8e85919d5f7c77bbeb17d
