@@ -11,7 +11,6 @@ bin/
 # 本地密钥、数据库配置、日志
 *.log
 db-config.properties
-ai-key.properties
 # 系统缓存
 .DS_Store
 Thumbs.db
