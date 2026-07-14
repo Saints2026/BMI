@@ -9,12 +9,14 @@ import java.net.URI;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
-import java.net.URI;
 
 public class AiHealthClient {
     private final String apiKey;
     private final String apiUrl;
-    private static final int TIMEOUT = 10000;
+    private static final int TIMEOUT = 15000; // 15秒超时，DeepSeek 可能较慢
+
+    // 模型名称，根据 DeepSeek 平台填写
+    private static final String MODEL = "deepseek-chat";
 
     public AiHealthClient(String apiKey, String apiUrl) throws AiConfigException {
         if (apiKey == null || apiKey.trim().isEmpty()) {
@@ -33,24 +35,51 @@ public class AiHealthClient {
         return parseResponse(response);
     }
 
+    // 构造符合 DeepSeek / OpenAI 规范的请求体
     private String buildJsonBody(List<BodyRecord> historyTrend) {
-        StringBuilder sb = new StringBuilder();
-        sb.append("{");
-        sb.append("\"historyTrend\":[");
+        // 构造 system prompt
+        String systemPrompt = 
+            "你是一位专业的健康顾问。请根据用户的历史BMI和体脂率数据，提供三方面建议：" +
+            "【饮食】建议、【运动】建议、【健康】建议。请严格按照以下格式返回：" +
+            "【饮食】...内容... 【运动】...内容... 【健康】...内容... " +
+            "每段内容要具体、可操作，不要有额外说明。";
+
+        // 构造 user 消息：包含历史数据
+        StringBuilder userContent = new StringBuilder("以下是用户近期的BMI和体脂率记录（按时间顺序）：\n");
         if (historyTrend != null && !historyTrend.isEmpty()) {
-            for (int i = 0; i < historyTrend.size(); i++) {
-                BodyRecord r = historyTrend.get(i);
-                sb.append("{");
-                sb.append("\"bmi\":").append(r.getBmi()).append(",");
-                sb.append("\"bodyFat\":").append(r.getBodyFat()).append(",");
-                sb.append("\"measureDate\":\"").append(r.getMeasureDate()).append("\"");
-                sb.append("}");
-                if (i < historyTrend.size() - 1) sb.append(",");
+            for (BodyRecord r : historyTrend) {
+                userContent.append("日期：").append(r.getMeasureDate())
+                           .append("，BMI：").append(r.getBmi())
+                           .append("，体脂率：").append(r.getBodyFat()).append("%\n");
             }
+        } else {
+            userContent.append("暂无历史数据，请提供通用健康建议。");
         }
-        sb.append("]");
-        sb.append("}");
-        return sb.toString();
+
+        // 手动拼接 JSON（避免引入第三方库）
+        StringBuilder json = new StringBuilder();
+        json.append("{");
+        json.append("\"model\":\"").append(MODEL).append("\",");
+        json.append("\"messages\":[");
+        // system 消息
+        json.append("{\"role\":\"system\",\"content\":\"").append(escapeJson(systemPrompt)).append("\"},");
+        // user 消息
+        json.append("{\"role\":\"user\",\"content\":\"").append(escapeJson(userContent.toString())).append("\"}");
+        json.append("],");
+        json.append("\"temperature\":0.7,");
+        json.append("\"max_tokens\":800");
+        json.append("}");
+        return json.toString();
+    }
+
+    // 简单的 JSON 字符串转义（处理引号和换行）
+    private String escapeJson(String s) {
+        if (s == null) return "";
+        return s.replace("\\", "\\\\")
+                .replace("\"", "\\\"")
+                .replace("\n", "\\n")
+                .replace("\r", "\\r")
+                .replace("\t", "\\t");
     }
 
     private String doPost(String json) throws AiException {
@@ -59,7 +88,7 @@ public class AiHealthClient {
             URL url = URI.create(apiUrl).toURL();
             conn = (HttpURLConnection) url.openConnection();
             conn.setRequestMethod("POST");
-            conn.setRequestProperty("Content-Type", "application/json; utf-8");
+            conn.setRequestProperty("Content-Type", "application/json");
             conn.setRequestProperty("Accept", "application/json");
             conn.setRequestProperty("Authorization", "Bearer " + apiKey);
             conn.setDoOutput(true);
@@ -98,36 +127,101 @@ public class AiHealthClient {
         }
     }
 
+    // 解析 DeepSeek 返回的 JSON，提取 content 并切割三段
     private AiHealthResult parseResponse(String json) throws AiException {
-        String diet = extractSection(json, "【饮食】");
-        String exercise = extractSection(json, "【运动】");
-        String health = extractSection(json, "【健康】");
+        // 提取 "content": "..." 中的内容
+        String content = extractContent(json);
+        if (content == null || content.isEmpty()) {
+            System.err.println("AI返回内容为空");
+            return getFallbackResult();
+        }
+
+        // 提取三段（支持 【饮食】、【运动】、【健康】 或 可能的变体）
+        String diet = extractSection(content, "【饮食】");
+        String exercise = extractSection(content, "【运动】");
+        String health = extractSection(content, "【健康】");
+
+        // 如果三段不全，尝试用更宽松的匹配（如 饮食：、运动：、健康：）
         if (diet == null || exercise == null || health == null) {
-            System.err.println("AI返回格式异常，未找到【饮食】【运动】【健康】三段");
-            return new AiHealthResult(
-                "建议均衡饮食，多吃蔬果。",
-                "建议每天步行30分钟。",
-                "建议保持良好作息，定期体检。"
-            );
+            diet = extractSection(content, "饮食");
+            exercise = extractSection(content, "运动");
+            health = extractSection(content, "健康");
         }
-        return new AiHealthResult(diet, exercise, health);
+
+        if (diet == null || exercise == null || health == null) {
+            System.err.println("AI返回格式无法解析，使用默认降级建议");
+            return getFallbackResult();
+        }
+
+        return new AiHealthResult(diet.trim(), exercise.trim(), health.trim());
     }
 
-    private String extractSection(String json, String tag) {
-        int start = json.indexOf(tag);
+    private String extractContent(String json) {
+        // 找 "content":" 的位置
+        String key = "\"content\":\"";
+        int start = json.indexOf(key);
         if (start == -1) return null;
-        int end = json.indexOf("【", start + tag.length());
-        if (end == -1) end = json.length();
-        String content = json.substring(start + tag.length(), end).trim();
-        if (content.startsWith(":") || content.startsWith("：")) {
-            content = content.substring(1).trim();
+        start += key.length();
+        // 找结束的引号，但要处理转义
+        int end = json.indexOf("\"", start);
+        // 简单处理：如果遇到 \\" 之类的，要跳过，但这里简单起见，直接找第一个未转义的引号
+        // 更严谨的做法是遍历，但为了简化，我们采用快速方式：找最后一个 " 前
+        // 因为 content 末尾可能还有逗号，所以找 " 再向前
+        // 这里简单处理：找到 start 之后第一个未转义的 "
+        StringBuilder sb = new StringBuilder();
+        for (int i = start; i < json.length(); i++) {
+            char c = json.charAt(i);
+            if (c == '\\') {
+                // 跳过转义符，保留下一个字符
+                sb.append(json.charAt(i+1));
+                i++;
+                continue;
+            }
+            if (c == '"') {
+                // 结束
+                break;
+            }
+            sb.append(c);
         }
-        if (content.startsWith("\"") && content.endsWith("\"")) {
-            content = content.substring(1, content.length() - 1);
-        }
-        return content;
+        return sb.toString();
     }
 
+    private String extractSection(String text, String tag) {
+        int start = text.indexOf(tag);
+        if (start == -1) return null;
+        // 从 tag 后面开始找下一个 tag 或结尾
+        int end = text.length();
+        // 找下一个标签，可以是 【饮食】或饮食等，但更直接：从 start+tag.length 开始找下一个中文方括号或特殊字符
+        // 简单做法：找下一个中文方括号 【 或 】
+        String[] possibleNextTags = {"【饮食】", "【运动】", "【健康】", "饮食", "运动", "健康"};
+        int nextTagPos = end;
+        for (String t : possibleNextTags) {
+            int pos = text.indexOf(t, start + tag.length());
+            if (pos != -1 && pos < nextTagPos) {
+                nextTagPos = pos;
+            }
+        }
+        String section = text.substring(start + tag.length(), nextTagPos).trim();
+        // 去除可能的前缀冒号
+        if (section.startsWith(":") || section.startsWith("：")) {
+            section = section.substring(1).trim();
+        }
+        // 去除多余的标点
+        if (section.endsWith("。") || section.endsWith(".")) {
+            section = section.substring(0, section.length()-1);
+        }
+        return section;
+    }
+
+    private AiHealthResult getFallbackResult() {
+        return new AiHealthResult(
+            "建议均衡饮食，多吃蔬果，控制糖分摄入。",
+            "建议每天步行30分钟，结合有氧运动。",
+            "建议保持良好作息，定期体检，关注BMI变化。"
+        );
+    }
+
+    // 内部结果类
     public static class AiHealthResult {
         private String dietAdvice;
         private String exerciseAdvice;
