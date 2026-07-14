@@ -11,26 +11,11 @@ import java.net.URL;
 import java.util.Properties;
 import java.io.InputStream;
 
-/**
- * AI 健康建议客户端
- * 对应 docs/ai_design.md §7.1 AiHealthClient
- * 仅使用 HttpURLConnection（原生），无第三方 HTTP 库
- * 四类异常处理：
- *   ① 断网 (ConnectException / UnknownHostException)
- *   ② 超时 (SocketTimeoutException) → 可重试1次
- *   ③ 参数为空 (AiRequest.isValid() 校验)
- *   ④ 服务器报错 (HTTP 5xx / 4xx / 响应异常)
- */
 public class AiHealthClient {
-
-    // ---- 超时配置（对应 AC-07 10s） ----
     private static final int CONNECT_TIMEOUT_MS = 10000;
     private static final int READ_TIMEOUT_MS = 10000;
-
-    // ---- 重试配置 ----
     private static final int MAX_RETRY = 1;
 
-    // ---- AI 配置（从 ai-key.properties 读取） ----
     private String apiUrl;
     private String apiKey;
     private String model;
@@ -39,9 +24,6 @@ public class AiHealthClient {
         loadConfig();
     }
 
-    /**
-     * 加载配置（对应规范“密钥安全”）
-     */
     private void loadConfig() {
         Properties props = new Properties();
         try (InputStream in = getClass().getClassLoader().getResourceAsStream("ai-key.properties")) {
@@ -52,7 +34,6 @@ public class AiHealthClient {
             apiUrl = props.getProperty("api.url");
             apiKey = props.getProperty("api.key");
             model = props.getProperty("api.model", "deepseek-chat");
-
             if (apiUrl == null || apiUrl.trim().isEmpty()) {
                 throw new RuntimeException("api.url 未配置");
             }
@@ -64,29 +45,44 @@ public class AiHealthClient {
         }
     }
 
-    /**
-     * 构建 AiRequest（对应规范 buildRequest）
-     * @param record 身体数据
-     * @param historySummary 历史趋势摘要（本项目中可传空字符串）
-     */
+    // 构造 AiRequest（使用 setter）
     public AiRequest buildRequest(BodyRecord record, String historySummary) {
-        String systemPrompt = "你是一位严谨的中文健康顾问，请按『饮食』『运动』『健康』三段给出建议。";
-        String userContent = "最新指标：身高" + record.getHeight() + "cm，体重" + record.getWeight() +
-                "kg，年龄" + record.getAge() + "岁，" + (record.getGender() == 1 ? "男" : "女") +
-                "。请给出健康建议。";
-        if (historySummary != null && !historySummary.isEmpty()) {
-            userContent += "\n历史趋势：" + historySummary;
-        }
-        // 实际使用中，这里调用 AI 模型处理 userContent，但我们直接传 record 给请求
-        // 这里简化为：AiRequest 中 systemPrompt + record
-        return new AiRequest(systemPrompt, record, 500, 0.7);
+        AiRequest req = new AiRequest();
+
+        // 设置 systemPrompt
+        req.setSystemPrompt("你是一位严谨的中文健康顾问，请按『饮食』『运动』『健康』三段给出建议。");
+
+        // 构建 UserMetrics
+        AiRequest.UserMetrics metrics = new AiRequest.UserMetrics();
+        // 注意：这里需要计算 BMI 和体脂率，但暂时简化，只传基本数据
+        metrics.setHeight(record.getHeight());
+        metrics.setWeight(record.getWeight());
+        metrics.setAge(record.getAge());
+        metrics.setGender(record.getGender());
+        // 简化：不传 BMI/体脂，让 AI 自己算
+        metrics.setBmi(0); // 占位
+        metrics.setBmiGrade(""); // 占位
+        metrics.setBodyFat(0); // 占位
+        metrics.setMeasureTime(java.time.LocalDateTime.now().toString());
+        req.setUserMetrics(metrics);
+
+        // 构建 ModelParams
+        AiRequest.ModelParams params = new AiRequest.ModelParams();
+        params.setModel(model);
+        params.setTemperature(0.7);
+        params.setMaxTokens(500);
+        req.setModelParams(params);
+
+        // 历史趋势（简化）
+        AiRequest.HistoryTrend trend = new AiRequest.HistoryTrend();
+        trend.setCount(0);
+        trend.setDirection("无数据");
+        req.setHistoryTrend(trend);
+
+        return req;
     }
 
-    /**
-     * 对外主入口（对应规范 requestAdvice）
-     * @param req AI 请求
-     * @return 建议文本或降级文案
-     */
+    // 对外主入口
     public String requestAdvice(AiRequest req) {
         AiHealthResult result = send(req);
         if (result.isSuccess()) {
@@ -96,19 +92,13 @@ public class AiHealthClient {
         }
     }
 
-    /**
-     * 内部主流程：HTTP 调用 + 四类异常处理
-     */
     private AiHealthResult send(AiRequest req) {
-        // ---- ③ 参数为空：入口校验，不重试 ----
         if (req == null || !req.isValid()) {
             return AiHealthResult.fail(AiHealthResult.INVALID_PARAM,
                     "当前数据不完整，暂无法生成 AI 建议，请先完成一次身高体重录入");
         }
 
-        String urlStr = apiUrl;
-        String key = apiKey;
-        if (urlStr == null || key == null) {
+        if (apiUrl == null || apiKey == null) {
             return AiHealthResult.fail(AiHealthResult.CONFIG_ERROR,
                     "AI 服务未配置，请联系管理员");
         }
@@ -118,44 +108,32 @@ public class AiHealthClient {
             attempt++;
             HttpURLConnection conn = null;
             try {
-                // ---- 构造请求体（手工拼接 JSON，不用第三方库） ----
                 String jsonBody = buildJsonBody(req);
-
-                // ---- 打开连接 ----
-                URL url = new URL(urlStr);
+                URL url = new URL(apiUrl);
                 conn = (HttpURLConnection) url.openConnection();
                 conn.setRequestMethod("POST");
                 conn.setConnectTimeout(CONNECT_TIMEOUT_MS);
                 conn.setReadTimeout(READ_TIMEOUT_MS);
                 conn.setRequestProperty("Content-Type", "application/json; charset=utf-8");
-                conn.setRequestProperty("Authorization", "Bearer " + key);
-                conn.setRequestProperty("Accept", "application/json");
+                conn.setRequestProperty("Authorization", "Bearer " + apiKey);
                 conn.setDoOutput(true);
 
-                // ---- 发送请求 ----
                 try (OutputStream os = conn.getOutputStream()) {
                     os.write(jsonBody.getBytes("UTF-8"));
                     os.flush();
                 }
 
-                // ---- 读取响应 ----
                 int statusCode = conn.getResponseCode();
-
-                // ---- ④ 服务器报错：5xx 可重试 1 次 ----
                 if (statusCode >= 500) {
-                    if (attempt <= MAX_RETRY) {
-                        continue; // 重试
-                    }
+                    if (attempt <= MAX_RETRY) continue;
                     return AiHealthResult.fail(AiHealthResult.SERVER_ERROR,
                             "AI 服务暂时不可用，请稍后再试");
                 }
-                // 4xx 直接降级，不重试
                 if (statusCode >= 400) {
                     return AiHealthResult.fail(AiHealthResult.SERVER_ERROR,
                             "AI 服务暂时不可用，请稍后再试");
                 }
 
-                // ---- 成功读取响应体 ----
                 String responseBody = readResponseBody(conn);
                 AiHealthResult result = parseResponse(responseBody);
                 if (!result.isSuccess()) {
@@ -165,61 +143,44 @@ public class AiHealthClient {
                 return result;
 
             } catch (SocketTimeoutException e) {
-                // ---- ② 接口超时：可重试 1 次 ----
-                if (attempt <= MAX_RETRY) {
-                    continue;
-                }
+                if (attempt <= MAX_RETRY) continue;
                 return AiHealthResult.fail(AiHealthResult.TIMEOUT,
                         "AI 建议请求超时，请稍后重试");
-
             } catch (ConnectException | UnknownHostException e) {
-                // ---- ① 断网：不重试 ----
                 return AiHealthResult.fail(AiHealthResult.NETWORK_ERROR,
                         "暂时无法获取 AI 建议，请检查网络或稍后再试");
-
             } catch (Exception e) {
-                // ---- 其它异常 ----
                 return AiHealthResult.fail(AiHealthResult.NETWORK_ERROR,
                         "暂时无法获取 AI 建议，请检查网络或稍后再试");
-
             } finally {
-                if (conn != null) {
-                    conn.disconnect();
-                }
+                if (conn != null) conn.disconnect();
             }
         }
-
         return AiHealthResult.fail(AiHealthResult.SERVER_ERROR,
                 "AI 服务暂时不可用，请稍后再试");
     }
 
-    /**
-     * 手工拼接 JSON 请求体（不依赖任何 JSON 库）
-     */
     private String buildJsonBody(AiRequest req) {
-        BodyRecord r = req.getRecord();
+        AiRequest.UserMetrics metrics = req.getUserMetrics();
         StringBuilder sb = new StringBuilder();
         sb.append("{");
         sb.append("\"model\":\"").append(model).append("\",");
         sb.append("\"messages\":[");
         sb.append("{\"role\":\"system\",\"content\":\"").append(escapeJson(req.getSystemPrompt())).append("\"},");
         sb.append("{\"role\":\"user\",\"content\":\"");
-        sb.append("身高").append(r.getHeight()).append("cm，");
-        sb.append("体重").append(r.getWeight()).append("kg，");
-        sb.append("年龄").append(r.getAge()).append("岁，");
-        sb.append(r.getGender() == 1 ? "男" : "女");
+        sb.append("身高").append(metrics.getHeight()).append("cm，");
+        sb.append("体重").append(metrics.getWeight()).append("kg，");
+        sb.append("年龄").append(metrics.getAge()).append("岁，");
+        sb.append(metrics.getGender() == 1 ? "男" : "女");
         sb.append("。请给出健康建议。");
         sb.append("\"}");
         sb.append("],");
-        sb.append("\"max_tokens\":").append(req.getMaxTokens()).append(",");
-        sb.append("\"temperature\":").append(req.getTemperature());
+        sb.append("\"max_tokens\":").append(req.getModelParams().getMaxTokens()).append(",");
+        sb.append("\"temperature\":").append(req.getModelParams().getTemperature());
         sb.append("}");
         return sb.toString();
     }
 
-    /**
-     * JSON 字符串转义（防注入）
-     */
     private String escapeJson(String s) {
         if (s == null) return "";
         return s.replace("\\", "\\\\")
@@ -229,9 +190,6 @@ public class AiHealthClient {
                 .replace("\t", "\\t");
     }
 
-    /**
-     * 读取响应体
-     */
     private String readResponseBody(HttpURLConnection conn) throws Exception {
         StringBuilder sb = new StringBuilder();
         try (BufferedReader reader = new BufferedReader(
@@ -244,22 +202,16 @@ public class AiHealthClient {
         return sb.toString();
     }
 
-    /**
-     * 手工解析 JSON 响应（不依赖任何 JSON 库）
-     * 提取 choices[0].message.content
-     */
     private AiHealthResult parseResponse(String jsonBody) {
         if (jsonBody == null || jsonBody.trim().isEmpty()) {
             return AiHealthResult.fail(AiHealthResult.SERVER_ERROR,
                     "AI 服务暂时不可用，请稍后再试");
         }
-        // 提取 content
         String content = extractContent(jsonBody);
         if (content == null || content.trim().isEmpty()) {
             return AiHealthResult.fail(AiHealthResult.SERVER_ERROR,
                     "AI 服务暂时不可用，请稍后再试");
         }
-        // 检查是否包含三段（饮食/运动/健康）
         if (!content.contains("饮食") && !content.contains("运动") && !content.contains("健康")) {
             return AiHealthResult.fail(AiHealthResult.SERVER_ERROR,
                     "AI 服务暂时不可用，请稍后再试");
@@ -267,42 +219,27 @@ public class AiHealthClient {
         return AiHealthResult.success(content);
     }
 
-    /**
-     * 从 JSON 中提取 "content" 字段值（手工解析）
-     */
     private String extractContent(String json) {
-        // 查找 "content":" 开始
         String key = "\"content\":\"";
         int start = json.indexOf(key);
         if (start < 0) {
-            // 尝试带转义的情况
             key = "\"content\": \"";
             start = json.indexOf(key);
-            if (start < 0) {
-                return null;
-            }
+            if (start < 0) return null;
         }
         start += key.length();
-        // 查找结束引号（处理转义）
         int end = start;
         while (end < json.length()) {
             char c = json.charAt(end);
             if (c == '\\') {
-                end += 2; // 跳过转义字符
+                end += 2;
                 continue;
             }
-            if (c == '"') {
-                break;
-            }
+            if (c == '"') break;
             end++;
         }
-        if (end >= json.length()) {
-            return null;
-        }
-        String content = json.substring(start, end);
-        // 处理转义
-        return content.replace("\\n", "\n")
-                .replace("\\\"", "\"")
-                .replace("\\\\", "\\");
+        if (end >= json.length()) return null;
+        return json.substring(start, end).replace("\\n", "\n")
+                .replace("\\\"", "\"").replace("\\\\", "\\");
     }
 }

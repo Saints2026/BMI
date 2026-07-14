@@ -1,20 +1,3 @@
-<<<<<<< HEAD
-# AI 健康建议接口设计
-
-## 接口定义
-- **方法签名**：`String getHealthAdvice(BodyRecord record)`
-- **入参**：BodyRecord 对象（包含身高、体重、年龄、心率、收缩压、舒张压）
-- **返回值**：纯中文健康建议文本
-
-## 异常处理
-- 参数为空：返回友好提示
-- 网络异常：返回“网络异常，请检查连接”
-- 超时异常：返回“请求超时，请稍后重试”
-- 服务器错误：返回错误码
-
-## 缓存策略
-- 相同身体数据缓存 10 分钟，减少重复调用
-=======
 # AI 健康建议接口 · 详细设计文档（SDD-AI）
 
 > 本文件是 `docs/plan.md` 第 5/6 节「AI 接口传参规范」的下游细化设计，必须严格遵循 `CODEBUDDY.md`（项目宪章）。
@@ -413,4 +396,3 @@ private AiHealthResult send(AiRequest req) {
 | AC-07 密钥缺失文案 | `CONFIG_ERROR` → 「AI 服务未配置，请联系管理员」 | 文案逐字一致 |
 | AC-07 文本非空且含三段 | `parseResponse` 校验 `content` 非空且含【饮食】/【运动】/【健康】 | 达标才视为成功 |
 | 宪章白名单 | 仅 Java + HttpURLConnection + 手工 JSON；jar 入 `lib/`；密钥读 `ai-key.properties` | 未引入任何白名单外技术 |
->>>>>>> main
