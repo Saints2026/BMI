@@ -2,12 +2,14 @@ package com.bmi.client;
 
 import com.bmi.exception.AiConfigException;
 import com.bmi.exception.AiException;
-import com.bmi.model.record.BodyRecord;
+import com.bmi.model.ai.BodyRecord;
 import java.io.*;
 import java.net.HttpURLConnection;
+import java.net.URI;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
+import java.net.URI;
 
 public class AiHealthClient {
     private final String apiKey;
@@ -54,7 +56,7 @@ public class AiHealthClient {
     private String doPost(String json) throws AiException {
         HttpURLConnection conn = null;
         try {
-            URL url = new URL(apiUrl);
+            URL url = URI.create(apiUrl).toURL();
             conn = (HttpURLConnection) url.openConnection();
             conn.setRequestMethod("POST");
             conn.setRequestProperty("Content-Type", "application/json; utf-8");

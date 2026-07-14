@@ -3,7 +3,7 @@ package com.bmi.controller;
 import com.bmi.client.AiHealthClient;
 import com.bmi.exception.AiConfigException;
 import com.bmi.exception.AiException;
-import com.bmi.model.record.BodyRecord;
+import com.bmi.model.ai.BodyRecord;
 import java.util.List;
 
 public class AiController {
