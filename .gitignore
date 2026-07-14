@@ -16,4 +16,4 @@ db-config.properties
 Thumbs.db
 # WorkBuddy缓存
 .codebuddy/tmp
-ai-key.properties
+ai-key.propertiesai-key.properties
