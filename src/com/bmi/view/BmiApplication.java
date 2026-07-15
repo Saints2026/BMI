@@ -7,9 +7,9 @@ import com.bmi.controller.RecordController;
 import com.bmi.controller.ReportController;
 import com.bmi.controller.SettingController;
 import com.bmi.controller.UserController;
+import com.bmi.exception.AiConfigException;
 import com.bmi.i18n.I18n;
 import com.bmi.model.User;
-import com.bmi.model.ai.AiService;
 import com.bmi.model.db.InMemoryUserDao;
 import com.bmi.model.db.JdbcRecordDao;
 import com.bmi.model.db.RecordDao;
@@ -17,6 +17,11 @@ import com.bmi.model.db.UserDao;
 import javafx.application.Application;
 import javafx.scene.Scene;
 import javafx.stage.Stage;
+
+import java.io.FileInputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.util.Properties;
 
 /**
  * BMI 桌面应用启动器（整合 LoginView 与 MainView 的导航衔接）。
@@ -32,8 +37,7 @@ public class BmiApplication extends Application {
     private final UserController userController = new UserController(userDao);
     private final RecordController recordController = new RecordController(recordDao);
     private final ChartController chartController = new ChartController(recordDao);
-    private final AiService aiService = new AiService();
-    private final AiController aiController = new AiController(recordDao, userDao, aiService);
+    private final AiController aiController = createAiController();
     private final PhotoController photoController = new PhotoController(recordDao);
     private final ReportController reportController =
             new ReportController(recordController, chartController, aiController);
@@ -57,6 +61,39 @@ public class BmiApplication extends Application {
 
     private void backToLogin() {
         stage.setScene(new Scene(new LoginView(userController, this::onLogin), 920, 620));
+    }
+
+    /**
+     * 从 ai-key.properties 读取 api.key 和 api.url，构造 AiController。
+     * 配置文件缺失或密钥为空时返回 null（AI 功能不可用，不阻断主流程）。
+     */
+    private static AiController createAiController() {
+        Properties props = new Properties();
+        // classpath 优先
+        try (InputStream is = BmiApplication.class.getClassLoader().getResourceAsStream("ai-key.properties")) {
+            if (is != null) {
+                props.load(is);
+            }
+        } catch (IOException ignored) {
+            // 继续尝试文件系统
+        }
+        // 回退工作目录
+        if (props.isEmpty()) {
+            try (InputStream is = new FileInputStream("ai-key.properties")) {
+                props.load(is);
+            } catch (IOException e) {
+                System.err.println("未找到 ai-key.properties，AI 功能将不可用");
+                return null;
+            }
+        }
+        String apiKey = props.getProperty("api.key", "");
+        String apiUrl = props.getProperty("api.url", "https://api.deepseek.com/v1/chat/completions");
+        try {
+            return new AiController(apiKey, apiUrl);
+        } catch (AiConfigException e) {
+            System.err.println("AI 配置异常: " + e.getMessage());
+            return null;
+        }
     }
 
     public static void main(String[] args) {

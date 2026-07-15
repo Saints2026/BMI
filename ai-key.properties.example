@@ -1,0 +1,7 @@
+# AI 大模型接口配置模板
+# 复制本文件为 ai-key.properties 后填写真实值；ai-key.properties 已被 .gitignore 忽略，切勿提交。
+# 密钥仅读此文件，禁止硬编码到源码中（宪章第 4/7 节）。
+
+api.key=your_api_key_here
+api.url=https://api.deepseek.com/v1/chat/completions
+api.model=deepseek-chat

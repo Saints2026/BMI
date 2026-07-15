@@ -6,7 +6,8 @@ bin/
 
 # IDE配置
 .idea/
-.vscode/
+.vscode/*
+!.vscode/settings.json
 *.iml
 *.launch
 
@@ -23,3 +24,4 @@ Thumbs.db
 .codebuddy/tmp
 .codebuddy/tmplib/*.jar
 lib/javafx/*.jar
+.classpath

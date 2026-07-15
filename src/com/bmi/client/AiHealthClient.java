@@ -2,7 +2,7 @@ package com.bmi.client;
 
 import com.bmi.exception.AiConfigException;
 import com.bmi.exception.AiException;
-import com.bmi.model.ai.BodyRecord;
+import com.bmi.model.BodyRecord;
 import java.io.*;
 import java.net.HttpURLConnection;
 import java.net.URI;
@@ -11,13 +11,15 @@ import java.nio.charset.StandardCharsets;
 import java.util.List;
 
 public class AiHealthClient {
+    
     private final String apiKey;
     private final String apiUrl;
     private static final int TIMEOUT = 15000; // 15秒超时，DeepSeek 可能较慢
 
     // 模型名称，根据 DeepSeek 平台填写
     private static final String MODEL = "deepseek-chat";
-
+    private static final java.util.Map<String, AiHealthResult> cache = new java.util.concurrent.ConcurrentHashMap<>();
+private static final long CACHE_TTL = 10 * 60 * 1000; // 10分钟（目前只存储，未做过期清理，简单实现）
     public AiHealthClient(String apiKey, String apiUrl) throws AiConfigException {
         if (apiKey == null || apiKey.trim().isEmpty()) {
             throw new AiConfigException("API Key 不能为空");
@@ -30,10 +32,19 @@ public class AiHealthClient {
     }
 
     public AiHealthResult getHealthAdvice(List<BodyRecord> historyTrend) throws AiException {
-        String requestBody = buildJsonBody(historyTrend);
-        String response = doPost(requestBody);
-        return parseResponse(response);
+    // 缓存key（简单用历史数据的hashCode）
+    String cacheKey = String.valueOf(historyTrend.hashCode());
+    AiHealthResult cached = cache.get(cacheKey);
+    if (cached != null) {
+        System.out.println("命中缓存，跳过API调用");
+        return cached;
     }
+    String requestBody = buildJsonBody(historyTrend);
+    String response = doPost(requestBody);
+    AiHealthResult result = parseResponse(response);
+    cache.put(cacheKey, result);
+    return result;
+}
 
     // 构造符合 DeepSeek / OpenAI 规范的请求体
     private String buildJsonBody(List<BodyRecord> historyTrend) {
@@ -48,7 +59,7 @@ public class AiHealthClient {
         StringBuilder userContent = new StringBuilder("以下是用户近期的BMI和体脂率记录（按时间顺序）：\n");
         if (historyTrend != null && !historyTrend.isEmpty()) {
             for (BodyRecord r : historyTrend) {
-                userContent.append("日期：").append(r.getMeasureDate())
+                userContent.append("日期：").append(r.getMeasureTime() != null ? r.getMeasureTime() : "N/A")
                            .append("，BMI：").append(r.getBmi())
                            .append("，体脂率：").append(r.getBodyFat()).append("%\n");
             }
