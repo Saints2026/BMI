@@ -1,7 +1,7 @@
 {
     "java.project.sourcePaths": ["src"],
+    "java.project.outputPath": "bin",
     "java.project.referencedLibraries": [
-        "lib/junit-jupiter-5.10.0.jar",
         "lib/junit-jupiter-api-5.10.0.jar",
         "lib/junit-platform-commons-1.10.0.jar",
         "lib/apiguardian-api-1.1.2.jar",

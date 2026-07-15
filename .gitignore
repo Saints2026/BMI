@@ -4,6 +4,11 @@ out/
 bin/
 *.class
 
+# 编译输出
+bin/
+com/
+*.class
+
 # IDE配置
 .idea/
 .vscode/*
