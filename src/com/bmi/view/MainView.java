@@ -59,6 +59,7 @@ public class MainView extends BorderPane implements LangChangeListener {
 
     private InputView inputView;
     private ChartView chartView;
+    private AiAnalysisView aiAnalysisView;  // AI 分析视图
     private final VBox center = new VBox(16);
     private String currentPage = "home";
 
@@ -93,7 +94,7 @@ public class MainView extends BorderPane implements LangChangeListener {
                 "nav.ai", "nav.photo", "nav.report", "nav.setting"};
         Runnable[] actions = {
                 this::showHome, this::showInput, () -> showPlaceholder("nav.history"),
-                this::showChart, () -> showPlaceholder("nav.ai"),
+                this::showChart, this::showAi,  // AI 分析改为真实页面
                 () -> showPlaceholder("nav.photo"), () -> showPlaceholder("nav.report"),
                 () -> showPlaceholder("nav.setting")};
         for (int i = 0; i < navKeys.length; i++) {
@@ -162,7 +163,7 @@ public class MainView extends BorderPane implements LangChangeListener {
         Button bAi = new Button(I18n.t("home.quick.ai"));
         bInput.setOnAction(e -> showInput());
         bChart.setOnAction(e -> showChart());
-        bAi.setOnAction(e -> showPlaceholder("nav.ai"));
+        bAi.setOnAction(e -> showAi());
         HBox quick = new HBox(10, bInput, bChart, bAi);
 
         home.getChildren().addAll(title, cards, quick);
@@ -199,6 +200,17 @@ public class MainView extends BorderPane implements LangChangeListener {
         }
         setCenter(chartView);
         currentPage = "chart";
+    }
+
+    /**
+     * 显示 AI 分析页面
+     */
+    private void showAi() {
+        if (aiAnalysisView == null) {
+            aiAnalysisView = new AiAnalysisView(aiController, recordController, user.getId());
+        }
+        setCenter(aiAnalysisView);
+        currentPage = "ai";
     }
 
     private void showPlaceholder(String key) {
@@ -242,6 +254,10 @@ public class MainView extends BorderPane implements LangChangeListener {
         // 当前页若为首页则重渲染卡片；Input/Chart 已自行监听语言变化，无需重建
         if (currentPage.equals("home")) {
             showHome();
+        }
+        // AI 分析页面语言刷新
+        if (currentPage.equals("ai") && aiAnalysisView != null) {
+            // AiAnalysisView 内部自行刷新
         }
     }
 
