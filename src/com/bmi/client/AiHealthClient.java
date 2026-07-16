@@ -2,6 +2,7 @@ package com.bmi.client;
 
 import com.bmi.exception.AiConfigException;
 import com.bmi.exception.AiException;
+import com.bmi.i18n.I18n;
 import com.bmi.model.BodyRecord;
 import java.io.*;
 import java.net.HttpURLConnection;
@@ -36,18 +37,18 @@ public class AiHealthClient {
     public AiHealthResult getHealthAdvice(List<BodyRecord> historyTrend) throws AiException {
         // 空参数检查
         if (historyTrend == null || historyTrend.isEmpty()) {
-            System.out.println("缓存未命中 — 数据不完整");
-            throw new AiException("数据不完整，请先完成身高体重录入");
+            System.out.println(I18n.t("ai.cache.miss") + " — " + I18n.t("ai.error.empty"));
+            throw new AiException(I18n.t("ai.error.empty"));
         }
 
         // 缓存key：基于数据内容生成，确保相同数据命中缓存
         String cacheKey = buildCacheKey(historyTrend);
         AiHealthResult cached = cache.get(cacheKey);
         if (cached != null) {
-            System.out.println("缓存命中");
+            System.out.println(I18n.t("ai.cache.hit"));
             return cached;
         }
-        System.out.println("缓存未命中");
+        System.out.println(I18n.t("ai.cache.miss"));
 
         String requestBody = buildJsonBody(historyTrend);
         String response = doPost(requestBody);
@@ -130,18 +131,18 @@ public class AiHealthClient {
             String response = (is != null) ? readStream(is) : "";
             if (code != 200) {
                 System.err.println("AI接口返回错误: code=" + code + ", msg=" + response);
-                throw new AiException("AI 服务暂时不可用，请稍后再试");
+                throw new AiException(I18n.t("ai.error.server"));
             }
             return response;
         } catch (SocketTimeoutException e) {
             System.err.println("请求超时: " + e.getMessage());
-            throw new AiException("请求超时，请稍后重试", e);
+            throw new AiException(I18n.t("ai.error.timeout"), e);
         } catch (UnknownHostException e) {
             System.err.println("网络连接失败: " + e.getMessage());
-            throw new AiException("网络连接失败，请检查网络后重试", e);
+            throw new AiException(I18n.t("ai.error.network"), e);
         } catch (IOException e) {
             System.err.println("AI接口调用异常: " + e.getMessage());
-            throw new AiException("AI 服务暂时不可用，请稍后再试", e);
+            throw new AiException(I18n.t("ai.error.server"), e);
         } finally {
             if (conn != null) conn.disconnect();
         }
