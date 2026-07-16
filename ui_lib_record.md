@@ -11,10 +11,10 @@
 
 | # | 依赖 | 类别 | 必需 | 用途 | 默认版本 | 关键 jar |
 |---|------|------|------|------|----------|-----------|
-| 1 | **OpenJFX（JavaFX SDK）** | UI 运行时 | ✅ 运行必选 | JavaFX 桌面 GUI（`LoginView`/`InputView`/`ChartView`/`MainView` + `LineChart` 折线图） | 21.0.2 (LTS) | `javafx-base` `javafx-controls` `javafx-graphics` `javafx-fxml`（+ 原生 dll） |
+| 1 | **OpenJFX（JavaFX SDK）** | UI 运行时 | ✅ 运行必选 | JavaFX 桌面 GUI（`LoginView`/`InputView`/`ChartView`/`MainView` + `LineChart` 折线图） | 21.0.11 (LTS) | `javafx-base` `javafx-controls` `javafx-graphics` `javafx-fxml`（+ 原生 dll） |
 | 2 | **mysql-connector-j** | JDBC 驱动 | ⚠️ 用 MySQL 时必选 | `db.type=mysql` 连接 MySQL（示例配置默认走 mysql） | 8.4.0 (LTS) | `mysql-connector-j-8.4.0.jar` |
-| 3 | **sqlite-jdbc** | JDBC 驱动 | ⚠️ 用 SQLite 时必选 | `db.type=sqlite` 连接 SQLite（**宪章首选、零服务**，默认推荐） | 3.47.1.0 | `sqlite-jdbc-3.47.1.0.jar` |
-| 4 | **JUnit 5**（Jupiter） | 测试 | ⚪ 仅测试 | `src/test/` 单元测试运行 | 5.11.4 / Platform 1.11.4 | `junit-platform-console-standalone-1.11.4.jar` |
+| 3 | **sqlite-jdbc** | JDBC 驱动 | ⚠️ 用 SQLite 时必选 | `db.type=sqlite` 连接 SQLite（**宪章首选、零服务**，默认推荐） | 3.46.1.3 | `sqlite-jdbc-3.46.1.3.jar` |
+| 4 | **JUnit 5**（Jupiter） | 测试 | ⚪ 仅测试 | `src/test/` 单元测试运行 | 5.10.0 / Platform 1.10.0 | `junit-jupiter-api-5.10.0.jar` `junit-platform-commons-1.10.0.jar` `apiguardian-api-1.1.2.jar` `opentest4j-1.3.0.jar` |
 
 > 说明：
 > - 第 2、3 项为**二选一**驱动——SQLite 是宪章首选（无需安装数据库服务），MySQL 用于服务端迁移场景。两者 jar 可同时放入 `lib/`，由 `db-config.properties` 的 `db.type` 切换。
@@ -26,16 +26,30 @@
 
 ## 2. 逐项详情（版本 / 下载 / 文件名）
 
-### 2.1 OpenJFX（JavaFX SDK）— 21.0.2 (LTS)
-- **为何此版本**：JavaFX 自 11 起独立于 JDK 发布；21 为当前 LTS，需 **JDK 11+**（满足「Java 8+」）。
+### 2.1 OpenJFX（JavaFX SDK）— 21.0.11 (LTS)
+- **为何此版本**：JavaFX 自 11 起独立于 JDK 发布；21 为当前 LTS，需 **JDK 21**（本工程技术栈限定 Java 21 + JavaFX 21）。
 - **下载（Gluon 官方 SDK，含 jar + 原生库）**：
   - 落地页：<https://openjfx.io/download.html>
-  - Windows x64 直链：<https://download2.gluonhq.com/openjfx/21.0.2/openjfx-21.0.2_windows-x64_bin-sdk.zip>
+  - Windows x64 直链：<https://download2.gluonhq.com/openjfx/21.0.11/openjfx-21.0.11_windows-x64_bin-sdk.zip>
   - 其它平台：将文件名中 `windows-x64` 换为 `linux-x64` / `osx-x64` / `osx-aarch64`。
 - **解压后 `lib/` 内含**（需全部保留，含 `.dll` 原生库）：
   `javafx.base.jar` `javafx.controls.jar` `javafx.fxml.jar` `javafx.graphics.jar`
-  `javafx.media.jar` `javafx.swing.jar` `javafx.web.jar` + `*.dll`（prism / glass / javafx_font 等）
+  `javafx.media.jar` `javafx.swing.jar` `javafx.web.jar` `javafx-swt.jar` + `*.dll`（prism / glass / javafx_font 等）
 - **本项目最小必要集**：`javafx-base` + `javafx-controls`（含 LineChart）+ `javafx-graphics` + `javafx-fxml`。建议整包保留以免缺模块。
+- **已落地 `lib/` 的逐 jar 五项字段清单（名称 / 版本 / 用途 / 下载来源 / 兼容 JDK·JavaFX）**：
+
+  | jar 名称 | 版本 | 用途 | 下载来源 | 兼容 JDK · JavaFX |
+  |----------|------|------|----------|-------------------|
+  | javafx-base.jar | 21.0.11 | JavaFX 基础模块（属性绑定、集合、并发、事件总线） | Gluon 官方 OpenJFX 21.0.11 SDK | JDK 21 · JavaFX 21 |
+  | javafx-controls.jar | 21.0.11 | UI 控件（Button/Label/TextField/ComboBox/密码框/图表控件） | Gluon 官方 OpenJFX 21.0.11 SDK | JDK 21 · JavaFX 21 |
+  | javafx-graphics.jar | 21.0.11 | 图形与窗口（Stage/Scene/CSS、Prism 渲染） | Gluon 官方 OpenJFX 21.0.11 SDK | JDK 21 · JavaFX 21 |
+  | javafx-fxml.jar | 21.0.11 | FXML 加载（本项目以代码构建为主，保留以兼容） | Gluon 官方 OpenJFX 21.0.11 SDK | JDK 21 · JavaFX 21 |
+  | javafx-media.jar | 21.0.11 | 音视频媒体播放（预留能力） | Gluon 官方 OpenJFX 21.0.11 SDK | JDK 21 · JavaFX 21 |
+  | javafx.swing.jar | 21.0.11 | Swing/JavaFX 互操作（预留能力） | Gluon 官方 OpenJFX 21.0.11 SDK | JDK 21 · JavaFX 21 |
+  | javafx.web.jar | 21.0.11 | WebView 内嵌浏览器（预留能力） | Gluon 官方 OpenJFX 21.0.11 SDK | JDK 21 · JavaFX 21 |
+  | javafx-swt.jar | 21.0.11 | SWT/JavaFX 桥接（预留能力） | Gluon 官方 OpenJFX 21.0.11 SDK | JDK 21 · JavaFX 21 |
+
+  > 全部 8 个 jar 已复制至 `lib/`，目录内**无任何 okhttp / okio / json 等污染依赖**（AI 模块仅用原生 `HttpURLConnection`）。
 
 ### 2.2 mysql-connector-j — 8.4.0 (LTS)
 - **为何此版本**：8.x 兼容 Java 8+，且 8.4 为 MySQL 官方 LTS；驱动类 `com.mysql.cj.jdbc.Driver`（8.x JDBC4 自动注册，无需 `Class.forName`）。
@@ -44,20 +58,23 @@
   - Maven Central 单 jar 直链：<https://repo1.maven.org/maven2/com/mysql/mysql-connector-j/8.4.0/mysql-connector-j-8.4.0.jar>
 - **文件名**：`mysql-connector-j-8.4.0.jar`（单文件，依赖已内嵌，无需额外 jar）。
 
-### 2.3 sqlite-jdbc — 3.47.1.0
+### 2.3 sqlite-jdbc — 3.46.1.3
 - **为何此版本**：Xerial 维护的 SQLite JDBC，单 jar 内嵌各平台原生库（含 Windows `.dll`），`db.type=sqlite` 零配置运行。
 - **下载**：
   - GitHub Releases：<https://github.com/xerial/sqlite-jdbc/releases>
-  - Maven Central 单 jar 直链：<https://repo1.maven.org/maven2/org/xerial/sqlite-jdbc/3.47.1.0/sqlite-jdbc-3.47.1.0.jar>
-- **文件名**：`sqlite-jdbc-3.47.1.0.jar`（单文件，原生库已内置）。
+  - Maven Central 单 jar 直链：<https://repo1.maven.org/maven2/org/xerial/sqlite-jdbc/3.46.1.3/sqlite-jdbc-3.46.1.3.jar>
+- **文件名**：`sqlite-jdbc-3.46.1.3.jar`（单文件，原生库已内置）。
 
-### 2.4 JUnit 5（Jupiter）— 5.11.4 / Platform 1.11.4
-- **为何此版本**：JUnit 5 当前稳定线；用 **console-standalone** 单 jar 即可运行（已聚合 api + engine + launcher + opentest4j + apiguardian），**无需构建工具**。
+### 2.4 JUnit 5（Jupiter）— 5.10.0 / Platform 1.10.0
+- **为何此版本**：JUnit 5 当前稳定线；采用**拆分多 jar** 模式（api + platform-commons + apiguardian + opentest4j），**无需构建工具**。
 - **下载**：
   - 官网：<https://junit.org/junit5/>
-  - Maven Central 单 jar 直链：<https://repo1.maven.org/maven2/org/junit/platform/junit-platform-console-standalone/1.11.4/junit-platform-console-standalone-1.11.4.jar>
-- **文件名**：`junit-platform-console-standalone-1.11.4.jar`
-- **备选（拆分多 jar，若不用 standalone）**：`junit-jupiter-api` `junit-jupiter-engine` `junit-jupiter-params` `junit-platform-commons` `junit-platform-engine` `junit-platform-launcher` `junit-platform-console` + `opentest4j` + `apiguardian-api`。首选 standalone，省心。
+  - Maven Central：
+    - `junit-jupiter-api-5.10.0.jar`：<https://repo1.maven.org/maven2/org/junit/jupiter/junit-jupiter-api/5.10.0/junit-jupiter-api-5.10.0.jar>
+    - `junit-platform-commons-1.10.0.jar`：<https://repo1.maven.org/maven2/org/junit/platform/junit-platform-commons/1.10.0/junit-platform-commons-1.10.0.jar>
+    - `apiguardian-api-1.1.2.jar`：<https://repo1.maven.org/maven2/org/apiguardian/apiguardian-api/1.1.2/apiguardian-api-1.1.2.jar>
+    - `opentest4j-1.3.0.jar`：<https://repo1.maven.org/maven2/org/opentest4j/opentest4j/1.3.0/opentest4j-1.3.0.jar>
+- **文件名**：`junit-jupiter-api-5.10.0.jar`、`junit-platform-commons-1.10.0.jar`、`apiguardian-api-1.1.2.jar`、`opentest4j-1.3.0.jar`
 
 ---
 
@@ -75,8 +92,11 @@ lib/
 │   ├── ...（其余按需）
 │   └── *.dll                                 # Windows 原生库（必须随 jar 一起）
 ├── mysql-connector-j-8.4.0.jar               # MySQL 驱动（db.type=mysql）
-├── sqlite-jdbc-3.47.1.0.jar                  # SQLite 驱动（db.type=sqlite，宪章首选）
-├── junit-platform-console-standalone-1.11.4.jar  # 测试（仅测试用，可放 lib/test/）
+├── sqlite-jdbc-3.46.1.3.jar                  # SQLite 驱动（db.type=sqlite，宪章首选）
+├── junit-jupiter-api-5.10.0.jar              # 测试（仅测试用）
+├── junit-platform-commons-1.10.0.jar         # 测试（仅测试用）
+├── apiguardian-api-1.1.2.jar                 # 测试（仅测试用）
+├── opentest4j-1.3.0.jar                      # 测试（仅测试用）
 └── ui_lib_record.md                         # ← 本清单
 ```
 > 要点：
@@ -133,8 +153,8 @@ java -jar lib/junit-platform-console-standalone-1.11.4.jar ^
 ## 5. 依赖核对清单（每次提交前自检）
 - [ ] `lib/javafx/` 含 `javafx-base/controls/graphics/fxml` 四个 jar **且**含 `*.dll`
 - [ ] `lib/mysql-connector-j-8.4.0.jar` 存在（用 MySQL 时）
-- [ ] `lib/sqlite-jdbc-3.47.1.0.jar` 存在（用 SQLite 时，宪章首选，建议常备）
-- [ ] `lib/junit-platform-console-standalone-1.11.4.jar` 存在（测试时）
+- [ ] `lib/sqlite-jdbc-3.46.1.3.jar` 存在（用 SQLite 时，宪章首选，建议常备）
+- [ ] `lib/junit-jupiter-api-5.10.0.jar` + `junit-platform-commons-1.10.0.jar` + `apiguardian-api-1.1.2.jar` + `opentest4j-1.3.0.jar` 存在（测试时）
 - [ ] **无** `json-*` / `okhttp-*` / `okio-*` 污染 jar
 - [ ] 本文件版本号与实际 jar 文件名一致
 - [ ] 中文编译已加 `-encoding UTF-8`

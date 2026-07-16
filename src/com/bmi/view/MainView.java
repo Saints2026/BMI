@@ -8,33 +8,34 @@ import com.bmi.controller.ReportController;
 import com.bmi.controller.SettingController;
 import com.bmi.controller.UserController;
 import com.bmi.i18n.AppConfig;
-import com.bmi.i18n.I18n;
+import com.bmi.view.util.I18nUtil;
 import com.bmi.i18n.Lang;
 import com.bmi.i18n.LangChangeListener;
+import com.bmi.i18n.ThemeChangeListener;
 import com.bmi.model.BodyRecord;
 import com.bmi.model.User;
+import com.bmi.view.util.StyleFactory;
+import com.bmi.view.util.ThemeConstant;
+import com.bmi.view.util.ToastBar;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
+import javafx.scene.chart.LineChart;
+import javafx.scene.chart.NumberAxis;
+import javafx.scene.chart.XYChart;
 import javafx.scene.control.Button;
 import javafx.scene.control.ComboBox;
 import javafx.scene.control.Label;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
+import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Consumer;
 
-/**
- * 系统首页 / 全局侧边导航壳（对齐 ui_design.md 第二章「MainView」）。
- * 左侧固定侧边导航，顶部栏（用户名 / 语言 / 配色 / 退出登录），
- * 中心区切换功能页：首页卡片、数据录入（InputView）、图表分析（ChartView），
- * 其余页面（历史/AI/照片/报告/设置）本版本以占位页呈现（待接入）。
- * 数据卡片加载最新 BodyRecord；录入/修改后联动刷新卡片与图表。
- */
-public class MainView extends BorderPane implements LangChangeListener {
+public class MainView extends StackPane implements LangChangeListener, ThemeChangeListener {
 
     private final User user;
     private final UserController userController;
@@ -46,224 +47,338 @@ public class MainView extends BorderPane implements LangChangeListener {
     private final SettingController settingController;
     private final Consumer<User> onLogout;
 
-    private final VBox sidebar = new VBox(6);
-    private final Label userNameLabel = new Label();
-    private final ComboBox<Lang> langCombo = ViewUtil.langCombo();
-    private final ComboBox<String> themeCombo = new ComboBox<>();
-    private final Button logoutBtn = new Button();
+    private final ToastBar toast = new ToastBar();
+    private final BorderPane root = new BorderPane();
+    private final VBox sidebar = new VBox(4);
+    private final Label sidebarLogo = new Label("BMI");
 
-    // 顶部栏标签（需随语言切换刷新）
-    private final Label lblTopUser = new Label();
-    private final Label lblTopLang = new Label();
-    private final Label lblTopTheme = new Label();
+    private final ComboBox<Lang> langCombo = StyleFactory.comboBox();
+    private final ComboBox<ThemeConstant.Theme> themeCombo = StyleFactory.comboBox();
+    private final Button logoutBtn = StyleFactory.secondaryButton("topbar.logout");
+
+    private final List<Button> navButtons = new ArrayList<>();
+    private String currentPage = "home";
 
     private InputView inputView;
     private ChartView chartView;
-    private AiAnalysisView aiAnalysisView;  // AI 分析视图
-    private final VBox center = new VBox(16);
-    private String currentPage = "home";
+    private HistoryView historyView;
+    private SettingsView settingsView;
 
     public MainView(User user, UserController userController, RecordController recordController,
                     ChartController chartController, AiController aiController,
                     PhotoController photoController, ReportController reportController,
                     SettingController settingController, Consumer<User> onLogout) {
-        this.user = user;
-        this.userController = userController;
-        this.recordController = recordController;
-        this.chartController = chartController;
-        this.aiController = aiController;
-        this.photoController = photoController;
-        this.reportController = reportController;
-        this.settingController = settingController;
+        this.user = user; this.userController = userController;
+        this.recordController = recordController; this.chartController = chartController;
+        this.aiController = aiController; this.photoController = photoController;
+        this.reportController = reportController; this.settingController = settingController;
         this.onLogout = onLogout;
 
         buildSidebar();
         buildTopBar();
-        setLeft(sidebar);
-        setCenter(center);
+        root.setLeft(sidebar);
+
+        getChildren().addAll(root, toast);
         showHome();
-        refreshTexts();
+        applyTheme(ThemeConstant.fromCssClass(AppConfig.getInstance().getTheme()));
         AppConfig.getInstance().addListener(this);
+        AppConfig.getInstance().addThemeListener(() -> {
+            ThemeConstant.Theme t = ThemeConstant.fromCssClass(AppConfig.getInstance().getTheme());
+            applyTheme(t);
+            if ("home".equals(currentPage)) showHome();
+        });
     }
 
     private void buildSidebar() {
-        sidebar.setPadding(new Insets(12));
-        sidebar.setPrefWidth(180);
         sidebar.getStyleClass().add("bmi-sidebar");
-        String[] navKeys = {"nav.home", "nav.input", "nav.history", "nav.chart",
-                "nav.ai", "nav.photo", "nav.report", "nav.setting"};
+
+        sidebarLogo.getStyleClass().add("bmi-sidebar-logo");
+        sidebar.getChildren().add(sidebarLogo);
+
+        String[] navKeys = {"nav.home", "nav.input", "nav.history", "nav.ai", "nav.photo", "nav.report", "nav.setting"};
         Runnable[] actions = {
-                this::showHome, this::showInput, () -> showPlaceholder("nav.history"),
-                this::showChart, this::showAi,  // AI 分析改为真实页面
-                () -> showPlaceholder("nav.photo"), () -> showPlaceholder("nav.report"),
-                () -> showPlaceholder("nav.setting")};
+                this::showHome, this::showInput, this::showHistory,
+                () -> showPlaceholder("nav.ai"), () -> showPlaceholder("nav.photo"),
+                () -> showPlaceholder("nav.report"), this::showSettings};
+
         for (int i = 0; i < navKeys.length; i++) {
-            Button b = new Button();
-            final int idx = i;
+            Button b = new Button(I18nUtil.t(navKeys[i]));
             b.setMaxWidth(Double.MAX_VALUE);
             b.getStyleClass().add("bmi-nav-btn");
             b.setUserData(navKeys[i]);
+            final int idx = i;
             b.setOnAction(e -> actions[idx].run());
             sidebar.getChildren().add(b);
+            navButtons.add(b);
+        }
+    }
+
+    private void setActiveNav(String key) {
+        for (Button b : navButtons) {
+            b.getStyleClass().remove("bmi-nav-active");
+            if (key.equals(b.getUserData())) b.getStyleClass().add("bmi-nav-active");
         }
     }
 
     private void buildTopBar() {
         HBox top = new HBox(12);
-        top.setPadding(new Insets(8, 12, 8, 12));
+        top.setPadding(new Insets(8, 16, 8, 16));
         top.setAlignment(Pos.CENTER_RIGHT);
         top.getStyleClass().add("bmi-topbar");
 
-        themeCombo.getItems().addAll(I18n.t("setting.light"), I18n.t("setting.dark"));
-        themeCombo.setValue(AppConfig.getInstance().getTheme().equals("dark")
-                ? I18n.t("setting.dark") : I18n.t("setting.light"));
-        themeCombo.setOnAction(e -> AppConfig.getInstance()
-                .setTheme(themeCombo.getValue().equals(I18n.t("setting.dark")) ? "dark" : "light"));
+        langCombo.getItems().addAll(Lang.ZH, Lang.EN);
+        langCombo.setButtonCell(langCell());
+        langCombo.setCellFactory(lv -> langCell());
+        langCombo.setValue(AppConfig.getInstance().getLang());
+        langCombo.setOnAction(e -> I18nUtil.setLang(langCombo.getValue()));
 
-        logoutBtn.setOnAction(e -> {
-            AppConfig.getInstance().removeListener(this);
-            onLogout.accept(user);
+        for (ThemeConstant.Theme t : ThemeConstant.ALL) themeCombo.getItems().add(t);
+        themeCombo.setButtonCell(themeCell());
+        themeCombo.setCellFactory(lv -> themeCell());
+        themeCombo.setValue(ThemeConstant.fromCssClass(AppConfig.getInstance().getTheme()));
+        themeCombo.setOnAction(e -> {
+            ThemeConstant.Theme t = themeCombo.getValue();
+            if (t != null) { applyTheme(t); AppConfig.getInstance().setTheme(t.cssClass()); settingController.setTheme(t.cssClass()); }
         });
 
-        userNameLabel.setText(user.getUsername());
-        lblTopUser.setText(I18n.t("topbar.username") + "：" + user.getUsername());
-        lblTopLang.setText(I18n.t("topbar.lang"));
-        lblTopTheme.setText(I18n.t("topbar.theme"));
+        logoutBtn.setOnAction(e -> { AppConfig.getInstance().removeListener(this); onLogout.accept(user); });
+
+        Label userLabel = new Label(I18nUtil.t("topbar.username") + ": " + user.getUsername());
+
         top.getChildren().addAll(
-                lblTopUser,
-                lblTopLang, langCombo,
-                lblTopTheme, themeCombo,
+                userLabel,
+                new Label(I18nUtil.t("topbar.lang")), langCombo,
+                new Label(I18nUtil.t("topbar.theme")), themeCombo,
                 logoutBtn);
-        setTop(top);
+        root.setTop(top);
+    }
+
+    private void applyTheme(ThemeConstant.Theme t) {
+        if (getScene() != null) ThemeConstant.apply(getScene(), t);
+        themeCombo.setValue(t);
     }
 
     private void showHome() {
         VBox home = new VBox(16);
-        home.setPadding(new Insets(16));
-        Label title = new Label(I18n.t("nav.home"));
-        title.getStyleClass().add("bmi-page-title");
+        home.setPadding(new Insets(20));
+        home.setStyle("-fx-background-color:" + ThemeConstant.DEFAULT_THEME.bg() + ";");
+        home.getStyleClass().add("bmi-home-content");
 
-        // 数据卡片：最新 BodyRecord
+        Label title = StyleFactory.title("nav.home");
+
         List<BodyRecord> all = recordController.queryRecords(user.getId(), null, null);
         BodyRecord latest = all.isEmpty() ? null : all.get(all.size() - 1);
-        HBox cards = new HBox(16);
-        if (latest == null) {
-            cards.getChildren().add(buildCard("card.bmi", I18n.t("home.noData"), "#9e9e9e"));
-        } else {
-            cards.getChildren().add(buildCard("card.bmi",
-                    round1(latest.getBmi()) + " (" + ViewUtil.bmiGradeName(latest.getBmi()) + ")",
-                    ViewUtil.gradeColor(latest.getBmi())));
-            cards.getChildren().add(buildCard("card.weight", round1(latest.getWeight()) + " kg", "#1565c0"));
-            cards.getChildren().add(buildCard("card.bodyfat", round1(latest.getBodyFat()) + " %", "#00897b"));
-        }
+        ThemeConstant.Theme curTheme = ThemeConstant.fromCssClass(AppConfig.getInstance().getTheme());
 
-        // 底部快捷
-        Button bInput = new Button(I18n.t("home.quick.input"));
-        Button bChart = new Button(I18n.t("home.quick.chart"));
-        Button bAi = new Button(I18n.t("home.quick.ai"));
+        HBox cards = buildMetricCards(latest, curTheme);
+        HBox.setHgrow(cards, Priority.ALWAYS);
+
+        Label bmiChartTitle = StyleFactory.sectionTitle("chart.bmi");
+        Label bpChartTitle = StyleFactory.sectionTitle("chart.bp");
+
+        LineChart<Number, Number> bmiChart = makeMiniChart(r -> r.getBmi(),
+                ThemeConstant.seriesColor(curTheme, 0), all);
+        LineChart<Number, Number> bpChart = makeMiniChart(r ->
+                        r.getSystolicBp() != null ? r.getSystolicBp().doubleValue() : 0,
+                ThemeConstant.seriesColor(curTheme, 1), all);
+        bmiChart.setTitle(null);
+        bpChart.setTitle(null);
+
+        VBox bmiCard = new VBox(6, bmiChartTitle, bmiChart);
+        VBox bpCard = new VBox(6, bpChartTitle, bpChart);
+        VBox.setVgrow(bmiChart, Priority.ALWAYS);
+        VBox.setVgrow(bpChart, Priority.ALWAYS);
+        HBox charts = new HBox(16, bmiCard, bpCard);
+        HBox.setHgrow(bmiCard, Priority.ALWAYS);
+        HBox.setHgrow(bpCard, Priority.ALWAYS);
+
+        Button bInput = StyleFactory.successFnButton("home.quick.input");
+        Button bPhoto = StyleFactory.warningFnButton("home.quick.photo");
+        Button bAi = StyleFactory.dangerFnButton("home.quick.ai");
         bInput.setOnAction(e -> showInput());
-        bChart.setOnAction(e -> showChart());
-        bAi.setOnAction(e -> showAi());
-        HBox quick = new HBox(10, bInput, bChart, bAi);
+        bPhoto.setOnAction(e -> showPlaceholder("nav.photo"));
+        bAi.setOnAction(e -> showPlaceholder("nav.ai"));
+        HBox actionBtns = new HBox(16, bInput, bPhoto, bAi);
+        actionBtns.setAlignment(Pos.CENTER);
+        HBox.setHgrow(bInput, Priority.ALWAYS);
+        HBox.setHgrow(bPhoto, Priority.ALWAYS);
+        HBox.setHgrow(bAi, Priority.ALWAYS);
 
-        home.getChildren().addAll(title, cards, quick);
-        setCenter(home);
+        home.getChildren().addAll(title, cards, charts, actionBtns);
+        root.setCenter(home);
+        setActiveNav("nav.home");
         currentPage = "home";
     }
 
-    private VBox buildCard(String titleKey, String value, String color) {
-        VBox c = new VBox(6);
-        c.setPadding(new Insets(14));
-        c.setPrefSize(160, 90);
-        c.setStyle("-fx-background-color:" + color + "; -fx-background-radius:8;");
-        Label t = new Label(I18n.t(titleKey));
-        t.setStyle("-fx-text-fill:white; -fx-font-size:12px;");
+    private HBox buildMetricCards(BodyRecord latest, ThemeConstant.Theme curTheme) {
+        HBox cards = new HBox(16);
+        cards.setAlignment(Pos.CENTER_LEFT);
+
+        if (latest == null) {
+            cards.getChildren().add(buildMetricCard("card.bmi", "--", I18nUtil.t("home.noData"), "#c9cdd4"));
+            return cards;
+        }
+
+        double bmi = round1(latest.getBmi());
+        String grade = gradeName(bmi);
+        double sys = latest.getSystolicBp() != null ? latest.getSystolicBp().doubleValue() : 0;
+        double dia = latest.getDiastolicBp() != null ? latest.getDiastolicBp().doubleValue() : 0;
+        double bf = round1(latest.getBodyFat());
+
+        String bmiColor = ThemeConstant.bmiGradeColor(bmi);
+        cards.getChildren().addAll(
+                buildMetricCard("card.bmi", bmi + "", grade, bmiColor),
+                buildMetricCard("card.bp", (int)sys + "/" + (int)dia, bpStatus(sys, dia), curTheme.primary() + "33"),
+                buildMetricCard("card.bodyfat", bf + "%", gradeNameBf(bf), curTheme.warning() + "44"),
+                buildMetricCard("card.waist", waistRiskStatus() + "", waistRiskStatusDetail(), curTheme.success() + "38"));
+        return cards;
+    }
+
+    private VBox buildMetricCard(String titleKey, String value, String status, String bgColor) {
+        VBox c = new VBox(8);
+        c.setPadding(new Insets(16, 20, 14, 20));
+        c.setMinSize(0, 100);
+        c.setStyle("-fx-background-color:" + bgColor + "; -fx-background-radius:10;"
+                + "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.08), 6, 0, 0, 2);");
+
+        Label t = new Label(I18nUtil.t(titleKey));
+        t.setStyle("-fx-font-size:12px; -fx-text-fill:rgba(255,255,255,0.85);");
+
         Label v = new Label(value);
-        v.setStyle("-fx-text-fill:white; -fx-font-size:20px; -fx-font-weight:bold;");
-        c.getChildren().addAll(t, v);
+        v.setStyle("-fx-font-size:24px; -fx-font-weight:bold; -fx-text-fill:white;");
+
+        Label s = new Label(status);
+        s.setStyle("-fx-font-size:11px; -fx-text-fill:rgba(255,255,255,0.75);");
+
+        c.getChildren().addAll(t, v, s);
         return c;
     }
 
-    private void showInput() {
-        if (inputView == null) {
-            inputView = new InputView(user.getId(), recordController, chartController, this::onDataChanged);
+    private String bpStatus(double sys, double dia) {
+        if (sys < 120 && dia < 80) return I18nUtil.t("grade.normal");
+        if (sys < 140 && dia < 90) return I18nUtil.t("status.high");
+        return I18nUtil.t("grade.obese");
+    }
+    private String gradeNameBf(double bf) {
+        if (bf < 15) return I18nUtil.t("grade.thin");
+        if (bf < 25) return I18nUtil.t("grade.normal");
+        return I18nUtil.t("grade.overweight");
+    }
+    private String waistRiskStatus() { return "82"; }
+    private String waistRiskStatusDetail() { return I18nUtil.t("status.low") + "cm"; }
+
+    private LineChart<Number, Number> makeMiniChart(java.util.function.ToDoubleFunction<BodyRecord> f,
+                                                    String color, List<BodyRecord> all) {
+        NumberAxis x = new NumberAxis(); x.setVisible(false);
+        NumberAxis y = new NumberAxis(); y.setVisible(false);
+        LineChart<Number, Number> chart = new LineChart<>(x, y);
+        chart.setPrefSize(Integer.MAX_VALUE, 180);
+        chart.setMinHeight(140);
+        chart.setMaxHeight(220);
+        chart.getStyleClass().add("bmi-chart");
+        chart.setLegendVisible(false);
+        chart.setHorizontalGridLinesVisible(false);
+        chart.setVerticalGridLinesVisible(false);
+        chart.setCreateSymbols(true);
+
+        if (all.size() >= 2) {
+            List<BodyRecord> recent = all.size() > 6 ? all.subList(all.size() - 6, all.size()) : all;
+            XYChart.Series<Number, Number> s = new XYChart.Series<>();
+            for (int i = 0; i < recent.size(); i++)
+                s.getData().add(new XYChart.Data<>(i + 1, f.applyAsDouble(recent.get(i))));
+            chart.getData().add(s);
         }
-        setCenter(inputView);
+        return chart;
+    }
+
+    private void showInput() {
+        if (inputView == null)
+            inputView = new InputView(user.getId(), recordController, chartController,
+                    this::onDataChanged, toast);
+        root.setCenter(inputView);
+        setActiveNav("nav.input");
         currentPage = "input";
     }
 
-    private void showChart() {
-        if (chartView == null) {
-            chartView = new ChartView(user.getId(), chartController);
-        } else {
-            chartView.refresh();
-        }
-        setCenter(chartView);
-        currentPage = "chart";
+    private void showHistory() {
+        historyView = new HistoryView(user.getId(), recordController, toast, this::editFromHistory);
+        root.setCenter(historyView);
+        setActiveNav("nav.history");
+        currentPage = "history";
     }
 
-    /**
-     * 显示 AI 分析页面
-     */
-    private void showAi() {
-        if (aiAnalysisView == null) {
-            aiAnalysisView = new AiAnalysisView(aiController, recordController, user.getId());
-        }
-        setCenter(aiAnalysisView);
-        currentPage = "ai";
+    private void editFromHistory(BodyRecord r) {
+        if (inputView == null)
+            inputView = new InputView(user.getId(), recordController, chartController,
+                    this::onDataChanged, toast);
+        inputView.loadRecord(r);
+        root.setCenter(inputView);
+        setActiveNav("nav.input");
+        currentPage = "input";
+        toast.success(I18nUtil.t("history.table.edit"));
+    }
+
+    private void showChart() {
+        ChartPopup popup = new ChartPopup(user.getId(), chartController);
+        popup.show();
+        setActiveNav("nav.chart");
+    }
+
+    private void showSettings() {
+        if (settingsView != null) settingsView.dispose();
+        settingsView = new SettingsView(user.getId(), settingController, toast);
+        root.setCenter(settingsView);
+        setActiveNav("nav.setting");
+        currentPage = "setting";
     }
 
     private void showPlaceholder(String key) {
         VBox box = new VBox(10);
         box.setPadding(new Insets(24));
-        box.getChildren().addAll(new Label(I18n.t(key)), new Label(I18n.t("page.todo")));
-        setCenter(box);
+        box.setStyle("-fx-background-color:" + ThemeConstant.DEFAULT_THEME.bg() + ";");
+        box.getChildren().addAll(new Label(I18nUtil.t(key)), new Label(I18nUtil.t("page.todo")));
+        root.setCenter(box);
+        setActiveNav(key);
         currentPage = key;
     }
 
-    /** 录入/修改成功后联动刷新：图表实时同步 + 首页卡片刷新。 */
     private void onDataChanged() {
-        if (currentPage.equals("chart") && chartView != null) {
-            chartView.refresh();
-        }
-        if (currentPage.equals("home")) {
-            showHome();
-        }
+        if ("home".equals(currentPage)) showHome();
     }
 
-    private double round1(double v) {
-        return Math.round(v * 10.0) / 10.0;
+    private double round1(double v) { return Math.round(v * 10.0) / 10.0; }
+
+    private String gradeName(double bmi) {
+        if (bmi < 18.5) return I18nUtil.t("grade.thin");
+        if (bmi < 24)   return I18nUtil.t("grade.normal");
+        if (bmi < 28)   return I18nUtil.t("grade.overweight");
+        return I18nUtil.t("grade.obese");
     }
 
     private void refreshTexts() {
-        // 侧边导航文案
-        for (javafx.scene.Node n : sidebar.getChildren()) {
-            if (n instanceof Button) {
-                Object k = n.getUserData();
-                if (k instanceof String) {
-                    ((Button) n).setText(I18n.t((String) k));
-                }
-            }
-        }
-        userNameLabel.setText(user.getUsername());
-        logoutBtn.setText(I18n.t("topbar.logout"));
-        lblTopUser.setText(I18n.t("topbar.username") + "：" + user.getUsername());
-        lblTopLang.setText(I18n.t("topbar.lang"));
-        lblTopTheme.setText(I18n.t("topbar.theme"));
-        themeCombo.getItems().setAll(I18n.t("setting.light"), I18n.t("setting.dark"));
-        // 当前页若为首页则重渲染卡片；Input/Chart 已自行监听语言变化，无需重建
-        if (currentPage.equals("home")) {
-            showHome();
-        }
-        // AI 分析页面语言刷新
-        if (currentPage.equals("ai") && aiAnalysisView != null) {
-            // AiAnalysisView 内部自行刷新
-        }
+        for (Button b : navButtons) b.setText(I18nUtil.t((String) b.getUserData()));
+        logoutBtn.setText(I18nUtil.t("topbar.logout"));
+        if ("home".equals(currentPage)) showHome();
     }
 
-    @Override
-    public void onLangChange() {
-        refreshTexts();
-        langCombo.setValue(AppConfig.getInstance().getLang());
+    @Override public void onLangChange() { refreshTexts(); langCombo.setValue(AppConfig.getInstance().getLang()); }
+    @Override public void onThemeChange() { }
+
+    private javafx.scene.control.ListCell<ThemeConstant.Theme> themeCell() {
+        return new javafx.scene.control.ListCell<ThemeConstant.Theme>() {
+            @Override protected void updateItem(ThemeConstant.Theme item, boolean empty) {
+                super.updateItem(item, empty);
+                setText(empty || item == null ? "" : I18nUtil.t(item.nameKey()));
+            }
+        };
+    }
+
+    private javafx.scene.control.ListCell<Lang> langCell() {
+        return new javafx.scene.control.ListCell<Lang>() {
+            @Override protected void updateItem(Lang item, boolean empty) {
+                super.updateItem(item, empty);
+                setText(empty || item == null ? "" : item.getDisplay());
+            }
+        };
     }
 }
