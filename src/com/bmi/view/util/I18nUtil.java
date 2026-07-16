@@ -92,7 +92,7 @@ public final class I18nUtil {
         } catch (Exception ignored) {
             // classpath 加载失败，继续尝试文件系统
         }
-        // 2. 回退源码目录（开发模式：javac -d . 不复制 .properties 文件）
+        // 2. 回退源码目录（开发模式：javac -d 不复制 .properties 文件）
         try (InputStream is = new FileInputStream("src/com/bmi/i18n/" + name)) {
             p.load(new InputStreamReader(is, StandardCharsets.UTF_8));
         } catch (Exception ignored) {

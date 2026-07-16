@@ -72,7 +72,7 @@ public class BmiApplication extends Application implements PageNavigator.Navigat
         if (recordController == null) {
             recordController = new RecordController(recordDao);
             chartController = new ChartController(recordDao);
-            // AI 控制器：从 ai-key.properties 读取密钥（禁止硬编码）
+            // AI 控制器：从 ai-key.properties 读取密钥（禁止硬编码，宪章第 4/7 节）
             System.out.println("[BMI] 开始构造 AiController...");
             try {
                 Properties aiProps = new Properties();
@@ -89,7 +89,6 @@ public class BmiApplication extends Application implements PageNavigator.Navigat
                 String apiKey = aiProps.getProperty("api.key", "");
                 String apiUrl = aiProps.getProperty("api.url",
                         "https://api.deepseek.com/v1/chat/completions");
-                System.out.println("[BMI] apiKey=" + apiKey + ", apiUrl=" + apiUrl);
                 aiController = new AiController(apiKey, apiUrl);
                 System.out.println("[BMI] AiController 构造成功！");
             } catch (Exception e) {

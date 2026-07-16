@@ -221,12 +221,7 @@ public class LoginView extends StackPane implements LangChangeListener {
             ToastBar.showWarning(I18nUtil.t("login.errorEmpty"));
             return;
         }
-
-        // 验证码开关：Mock 模式下（skip.captcha=true）跳过验证码校验，便于测试
-        if (AppConfig.getInstance().isSkipCaptcha()) {
-            System.out.println("[DEBUG] 登录跳过验证码（skipCaptcha=true）");
-        }
-        // 正常模式下此处可添加验证码校验逻辑
+        // No captcha check — captcha removed from login page
 
         User okUser = UserSession.getInstance().findRegisteredUser(u, p);
         if (okUser == null) {
