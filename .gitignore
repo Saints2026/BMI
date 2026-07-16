@@ -19,6 +19,9 @@ bin/
 db-config.properties
 ai-key.properties
 
+# SQLite 数据库文件
+bmi.db
+
 # 系统缓存
 .DS_Store
 Thumbs.db

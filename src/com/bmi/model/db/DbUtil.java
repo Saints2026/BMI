@@ -37,6 +37,9 @@ public final class DbUtil {
     /** 配置缓存：仅在类加载时读取一次（属连接参数，运行期不变）。 */
     private static final Properties PROPS = loadProps();
 
+    /** 首次连接时自动建表标记（仅执行一次，幂等 CREATE IF NOT EXISTS）。 */
+    private static boolean tablesInitialized = false;
+
     private DbUtil() {
         // 工具类不可实例化
     }
@@ -81,11 +84,16 @@ public final class DbUtil {
 
         try {
             if ("sqlite".equals(type)) {
-                // sqlite-jdbc 实现 JDBC4 自动注册；无需显式加载驱动
+                try {
+                    Class.forName("org.sqlite.JDBC"); // 显式注册驱动，避免 DriverManager 找不到
+                } catch (ClassNotFoundException cnfe) {
+                    throw new DbException("SQLite 驱动未加载（请确认 lib/sqlite-jdbc-*.jar 存在）", cnfe);
+                }
                 Connection conn = DriverManager.getConnection(url);
                 try (Statement st = conn.createStatement()) {
                     st.execute("PRAGMA foreign_keys = ON"); // SQLite 必须每次连接开启
                 }
+                initTablesIfNeeded(conn); // 首次连接自动建表
                 return conn;
             }
             // 默认 MySQL：mysql-connector-j 8+ 自动注册驱动；旧版可在此显式
@@ -146,5 +154,48 @@ public final class DbUtil {
     public static void closeQuietly(ResultSet rs, Statement stmt) {
         closeQuietly(rs);
         closeQuietly(stmt);
+    }
+
+    /**
+     * 首次 SQLite 连接时自动建表（幂等，CREATE IF NOT EXISTS）。
+     * 对齐 db_design.md §4.1 SQLite 方言 DDL。
+     */
+    private static synchronized void initTablesIfNeeded(Connection conn) throws SQLException {
+        if (tablesInitialized) return;
+        try (Statement st = conn.createStatement()) {
+            st.execute("CREATE TABLE IF NOT EXISTS \"user\" ("
+                    + "id            INTEGER PRIMARY KEY AUTOINCREMENT,"
+                    + "username      TEXT    NOT NULL UNIQUE,"
+                    + "password_hash TEXT    NOT NULL,"
+                    + "salt          TEXT    NOT NULL,"
+                    + "created_at    DATETIME DEFAULT CURRENT_TIMESTAMP,"
+                    + "updated_at    DATETIME DEFAULT CURRENT_TIMESTAMP,"
+                    + "status        INTEGER  NOT NULL DEFAULT 1)");
+            st.execute("CREATE TABLE IF NOT EXISTS body_record ("
+                    + "id            INTEGER PRIMARY KEY AUTOINCREMENT,"
+                    + "user_id       INTEGER NOT NULL,"
+                    + "measure_time  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,"
+                    + "height        NUMERIC(5,2) NOT NULL,"
+                    + "weight        NUMERIC(5,2) NOT NULL,"
+                    + "bmi           NUMERIC(4,1) NOT NULL,"
+                    + "body_fat      NUMERIC(4,1) NOT NULL,"
+                    + "waist_circum  NUMERIC(5,2),"
+                    + "hip_circum    NUMERIC(5,2),"
+                    + "neck_circum   NUMERIC(5,2),"
+                    + "wrist_circum  NUMERIC(5,2),"
+                    + "systolic_bp   INTEGER,"
+                    + "diastolic_bp  INTEGER,"
+                    + "heart_rate    INTEGER,"
+                    + "visceral_fat  INTEGER,"
+                    + "diseases      TEXT,"
+                    + "photo_path    TEXT,"
+                    + "created_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,"
+                    + "FOREIGN KEY (user_id) REFERENCES \"user\"(id) ON DELETE CASCADE)");
+            st.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_user_username ON \"user\"(username)");
+            st.execute("CREATE INDEX IF NOT EXISTS idx_record_user_time ON body_record(user_id, measure_time)");
+            st.execute("CREATE INDEX IF NOT EXISTS idx_record_user_id ON body_record(user_id, id DESC)");
+            System.out.println("SQLite 数据库表已自动初始化");
+        }
+        tablesInitialized = true;
     }
 }
