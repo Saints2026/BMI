@@ -77,6 +77,7 @@ public class HistoryView extends StackPane implements LangChangeListener {
     private final LineChart<Number, Number> trendChart;
     private final Label chartTitle = StyleFactory.sectionTitle("chart.trend");
     private final Button btnExportChart = StyleFactory.primaryButton("chart.export");
+    private final Button backBtn = StyleFactory.secondaryButton("input.backToInput");
 
     public HistoryView(User user, RecordController recordController) {
         this.user = user;
@@ -279,8 +280,9 @@ public class HistoryView extends StackPane implements LangChangeListener {
     private void buildBottomBar(BorderPane bp) {
         btnBatchDelete.setOnAction(e -> confirmAndBatchDelete());
         btnTrendChart.setOnAction(e -> refreshTrendChart(table.getItems()));
+        backBtn.setOnAction(e -> PageNavigator.toInput(user));
 
-        HBox bar = new HBox(10, btnBatchDelete, btnTrendChart);
+        HBox bar = new HBox(10, backBtn, btnBatchDelete, btnTrendChart);
         bar.setPadding(new Insets(10, 16, 10, 16));
         bar.setAlignment(Pos.CENTER_LEFT);
         for (Button b : new Button[]{btnBatchDelete, btnTrendChart}) HBox.setHgrow(b, Priority.ALWAYS);
@@ -368,6 +370,7 @@ public class HistoryView extends StackPane implements LangChangeListener {
         btnTrendChart.setText(I18nUtil.t("history.generateTrend"));
         btnExportChart.setText(I18nUtil.t("chart.export"));
         chartTitle.setText(I18nUtil.t("chart.trend"));
+        backBtn.setText(I18nUtil.t("input.backToInput"));
         refreshSelectionCount();
     }
 

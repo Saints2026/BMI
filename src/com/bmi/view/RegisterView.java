@@ -4,6 +4,7 @@ import com.bmi.controller.UserController;
 import com.bmi.i18n.AppConfig;
 import com.bmi.i18n.Lang;
 import com.bmi.i18n.LangChangeListener;
+import com.bmi.model.User;
 import com.bmi.view.util.Alerts;
 import com.bmi.view.util.I18nUtil;
 import com.bmi.view.util.PageNavigator;
@@ -23,7 +24,6 @@ import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
-import javafx.util.Duration;
 
 import java.security.SecureRandom;
 import java.util.function.UnaryOperator;
@@ -331,10 +331,15 @@ public class RegisterView extends StackPane implements LangChangeListener {
         StyleFactory.clearError(regPwd2, errRegPwd2);
         StyleFactory.clearError(captchaInput, errCaptcha);
 
-        // === SUCCESS: NO toast/alert popup — silent 3-second auto-jump to login ===
-        PauseTransition pt = new PauseTransition(Duration.seconds(3));
-        pt.setOnFinished(e -> goLogin());
-        pt.play();
+        // === SUCCESS: 注册成功后自动登录并跳转至用户信息录入页（携带登录用户） ===
+        AppConfig.getInstance().removeListener(this);
+        User regUser = userController.login(u, p);
+        if (regUser != null) {
+            PageNavigator.toUserInfoInput(regUser);
+        } else {
+            // 极端兜底：登录未返回用户（理论不会发生），回退到登录页
+            PageNavigator.toLogin();
+        }
     }
 
     private void goLogin() {
