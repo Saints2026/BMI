@@ -253,7 +253,7 @@ public class LoginView extends StackPane implements LangChangeListener {
 
     private void goInput(User user) {
         AppConfig.getInstance().removeListener(this);
-        PageNavigator.toUserInfoInput(user);
+        PageNavigator.toInput(user);
     }
 
     private void goRegister() {

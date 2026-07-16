@@ -66,6 +66,9 @@ public final class AppConfig {
     private Lang lang = Lang.ZH;
     private String theme = "fresh";
     private boolean mockDaoEnabled = false; // Mock 模式：开启后使用 MockUserDao 脱离后端自测
+    private String profileName = "";        // 用户昵称（个人资料）
+    private String fontSize = "M";          // 字体大小档位 S/M/L/XL
+    private String storagePath = "";        // 本地存储路径（可为空，缺省默认）
     private final List<LangChangeListener> listeners = new ArrayList<>();
     private final List<ThemeChangeListener> themeListeners = new ArrayList<>();
 
@@ -88,6 +91,9 @@ public final class AppConfig {
         this.theme = (th != null && !th.trim().isEmpty()) ? th.trim() : "fresh";
         // Mock 模式开关（缺省关闭，走原 InMemoryUserDao）
         this.mockDaoEnabled = Boolean.parseBoolean(p.getProperty("mock.dao.enabled", "false"));
+        this.profileName = p.getProperty("profile.name", "");
+        this.fontSize = p.getProperty("ui.font.size", "M");
+        this.storagePath = p.getProperty("storage.path", "");
     }
 
     // ============ 语言 ============
@@ -177,6 +183,38 @@ public final class AppConfig {
     public void setMockDaoEnabled(boolean on) {
         this.mockDaoEnabled = on;
         setProp("mock.dao.enabled", Boolean.toString(on));
+    }
+
+    // ============ 个人资料 / 字体 / 存储路径 ============
+
+    public String getProfileName() {
+        return profileName;
+    }
+
+    public void setProfileName(String name) {
+        this.profileName = name == null ? "" : name;
+        setProp("profile.name", this.profileName);
+    }
+
+    public String getFontSize() {
+        return fontSize;
+    }
+
+    /** 设置字体档位（S/M/L/XL）并持久化。 */
+    public void setFontSize(String size) {
+        if (size == null) return;
+        this.fontSize = size;
+        setProp("ui.font.size", size);
+    }
+
+    public String getStoragePath() {
+        return storagePath;
+    }
+
+    /** 设置本地存储路径并持久化（空字符串表示使用默认路径）。 */
+    public void setStoragePath(String path) {
+        this.storagePath = path == null ? "" : path;
+        setProp("storage.path", this.storagePath);
     }
 
     // ============ 监听器注册 ============

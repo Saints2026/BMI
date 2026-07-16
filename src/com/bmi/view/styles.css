@@ -495,6 +495,13 @@
     -fx-font-weight: normal;
 }
 
+/* Empty / no-data centered hint (ChartView, etc.) */
+.bmi-empty-hint {
+    -fx-font-size: 14px;
+    -fx-text-fill: -bmi-muted;
+    -fx-alignment: center;
+}
+
 /* ==================== Accordion / Titled Pane ==================== */
 .bmi-accordion .titled-pane {
     -fx-border-color: -bmi-border;

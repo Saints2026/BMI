@@ -530,6 +530,413 @@ Exit Code: 0
 ## 5. 权限边界声明（本提交实际改动）
 - **新增** `src/com/bmi/view/util/MockUserDao.java`
 - **修改** `src/com/bmi/i18n/AppConfig.java`（新增 mock 开关）、`src/com/bmi/view/BmiApplication.java`（装配 Mock）、`src/com/bmi/view/RegisterView.java`（`lang.toggle` i18n 补正）、`src/com/bmi/i18n/ui_zh.properties`、`src/com/bmi/i18n/ui_en.properties`（新增 `lang.toggle`）、`docs/ui_verification_report.md`（本报告）
-- **未修改** 任何 `model/db`、`model/ai` 后端业务文件；**AiController 完全未动**
-- 全部改动位于 github 技能允许的 UI 层 / Mock 工具 / i18n / AppConfig / 脚本 / docs 范围
+  - **未修改** 任何 `model/db`、`model/ai` 后端业务文件；**AiController 完全未动**
+  - 全部改动位于 github 技能允许的 UI 层 / Mock 工具 / i18n / AppConfig / 脚本 / docs 范围
+
+---
+
+# 第十六版（V16）· 全项目 UI 落地核查 — 未落地需求清单
+
+> 触发：用户指令「全项目 UI 落地核查（对照 6 张设计稿 + 全部历史需求，输出未完成项清单）」。
+> 方法：**只读核查**（源码走查 + 导航链路追踪），未改动任何代码；仅列「未实现 / 未对齐 / 缺失交互 / 样式错乱 / 校验失效」项，已完成功能不重复罗列。
+> 设计稿依据：`docs/ui_design.md`（6 张设计稿的文本化，仓库内无位图截图，下列「设计稿位置」以 ui_design.md 章节指代）。
+> 导航链路事实（决定用户实际看到哪个页面）：
+> `BmiApplication.start()` → `RegisterView`；`RegisterView` 注册成功 3s → `LoginView`；
+> `LoginView` 登录成功 → **`UserInfoInputView`**（`PageNavigator.toUserInfoInput`，即「体质录入」首屏）；
+> `UserInfoInputView` 保存 → `MainView`；`MainView` 侧边「数据录入」→ **`InputView`**（另一套录入页）。
+
+## 0. 重大结构性问题（建议最先处理）
+| 缺失/矛盾项 | 证据 | 影响 |
+|----|----|----|
+| **两套录入页并存且互相矛盾** | `UserInfoInputView`（扁平 2 列网格：性别/年龄/身高/体重/腰围/臀围/体脂率/收缩压/舒张压/吸烟/饮酒/运动；无折叠面板、无既往疾病选择、无测量时间、无浮动卡片外的 BMI 实时；BP 为选填）vs `InputView`（4 折叠面板：基础/围度/健康/疾病；含测量时间/心率/内脏脂肪/颈围/既往疾病多选；无体脂率/吸烟饮酒运动字段；BP 为选填） | 同一「录入」功能在两个可达路径呈现**不同字段、布局、提交行为**，用户认知与数据不一致 |
+| **主流程录入不落库** | `UserInfoInputView.doSubmit()` → `storeToSession()` → `UserSession.syncToDatabase()` 为**空实现**（`UserSession.java:179` `/* reserved: no-op */`）；仅 `MainView→录入` 走 `InputView.doSave()` → `recordController.createRecord` 真正落库 | 核心 FR-02（身高体重录入）在**登录后的强制前置录入路径失效**：保存后历史/图表为空，首页显示「暂无记录」 |
+| **必填/选填标注两页不一致** | `UserInfoInputView.addFormCell` 已实现「必填红* / 选填灰字」；`InputView.row()` 仅渲染纯 Label，无红*也无灰字「选填」（仅提交报错时红框） | 全局规范「必填红*、选填灰字」在 `InputView` 路径未满足 |
+
+## 1. 页面布局缺失
+| # | 缺失项 | 涉及页面/文件 | 设计稿位置 | 现状 | 优先级 |
+|----|----|----|----|----|----|
+| 1.1 | **AI 分析页未实现** | `MainView.java:101` `showPlaceholder("nav.ai")` | ui_design.md §5 | 仅占位显示「页面待接入」（`page.todo`），无记录选择/建议区/缓存逻辑 | **高** |
+| 1.2 | **报告导出页未实现** | `MainView.java:102` `showPlaceholder("nav.report")` | ui_design.md §7 | 仅占位，无范围选择/内容勾选/导出 HTML | **高** |
+| 1.3 | **体型照片上传/绑定未实现** | `SettingsView.java:107` 上传按钮 `onClick` 仅 `ToastBar.showWarning(page.todo)` | ui_design.md §6 | 左栏「添加照片」无 `FileChooser`、无复制本地文件、无路径回写 `body_record.photo_path`；文件表格恒为空 | **高** |
+| 1.4 | **录入页布局与设计稿（4 折叠面板）不一致** | `UserInfoInputView`（登录主流程入口） | ui_design.md §3 | 该路径为扁平网格，**无 Accordion 4 面板、无既往疾病选择、无测量时间**；与用户清单三.1「四大自适应折叠面板」不符 | **高** |
+| 1.5 | **首页顶部搜索框缺失** | `MainView.buildTopBar`（`MainView.java:123-154`） | ui_design.md §2.1 | 顶栏仅有 用户名/语言/配色/退出，无搜索框 | 低 |
+| 1.6 | 侧边导航项数与清单不完全一致 | `MainView.java:98` navKeys | 用户清单四.1 | 多出独立的「体型照片」项；设计稿含「图表」项（当前并入历史页） | 低 |
+
+## 2. 交互未实现
+| # | 缺失项 | 涉及页面/文件 | 设计稿位置 | 现状 | 优先级 |
+|----|----|----|----|----|----|
+| 2.1 | **主流程录入保存不落库** | `UserInfoInputView.java:363-371` + `UserSession.java:179` | FR-02 | 见 §0 结构性问题；保存后无 `body_record` 写入 | **高** |
+| 2.2 | **历史页「导出图表」未实现** | `HistoryView.java:258-259` `btnExportChart` → `ToastBar.showSuccess(chart.export + page.todo)` | ui_design.md §4.3 | 点击仅提示，无实际导出（图片/PDF/HTML） | 中 |
+| 2.3 | **系统设置-个人资料编辑未实现** | `SettingsView.java:264` `pfEditBtn` → `ToastBar.showWarning(page.todo)` | ui_design.md §8 | 点击仅提示，无资料编辑/保存逻辑 | 中 |
+| 2.4 | **字体大小设置不生效** | `SettingsView.java:175-177` `fontSizeCombo` → `ToastBar.showSuccess(setting.applied)` | ui_design.md §8（语言字体卡片） | 选择后仅 Toast，未做全局字号缩放 | 低 |
+| 2.5 | **本地存储路径不可设置** | `SettingsView.java:249-259` `storagePathField` 只读、`clear` 无意义 | ui_design.md §8 | 未接 `SettingController` 持久化路径，清空仅清显示 | 低 |
+| 2.6 | 缩放图表 `ChartPopup` 无入口挂载 | `MainView.showChart()` 未被任何 nav 调用 | ui_design.md §三 | 已开发但运行时不可达（孤儿代码） | 低 |
+
+## 3. 通用全局功能缺失
+| # | 缺失项 | 涉及页面/文件 | 设计稿位置 | 现状 | 优先级 |
+|----|----|----|----|----|----|
+| 3.1 | **BMI 悬浮卡片未做到「所有页面可见」** | 仅 `UserInfoInputView.java:119` 加 `.bmi-floating-card` | 全局规范 §一.5(6) | `MainView`/`HistoryView`/`SettingsView`/`Login`/`Register` 均无；且当前为页内右上卡片，非全局固定 overlay | 中 |
+| 3.2 | **窗口自适应仅录入页生效** | `InputView.responsiveGrid` 用 `Responsive.bind`；其余页固定 | 全局规范 §一.5(5) | `MainView` 卡片 `HBox` 恒单行、`HistoryView` 表格/图表固定，不随宽度多栏/双栏/单列切换 | 中 |
+| 3.3 | **首页「腰围风险」卡片为硬编码假数据** | `MainView.java:267` `waistRiskStatus()` 固定返回 `"82"` | ui_design.md §2.3 | 未读真实记录，任何用户均显示 82cm | 低 |
+
+## 4. 校验规则缺失
+| # | 缺失项 | 涉及页面/文件 | 设计稿位置 | 现状 | 优先级 |
+|----|----|----|----|----|----|
+| 4.1 | **`InputView` 缺「必填红* / 选填灰字」标注** | `InputView.java:157-164` `row()` | 全局 §一.5(3)、用户清单三.1 | 仅纯 Label，无红*、无灰字「选填」；`UserInfoInputView` 已实现但两页渲染不一致 | 中 |
+| 4.2 | 数值输入实时拦截 | `StyleFactory.numberField` 用 `TextFormatter` 仅数字+小数点 | 全局 §一.5(4) | 录入页数值框已满足；用户名/密码为文本属正常 —— **已满足，非缺失** | — |
+| 4.3 | 区间/必填/负数校验 | 两录入页 `validateBpRange`/`checkRange`/`validate` | 全局 §一.3 | 身高/体重/年龄/血压区间已实现；BP 空值跳过 —— **基本满足** | — |
+
+## 5. 图表功能缺失
+| # | 缺失项 | 涉及页面/文件 | 设计稿位置 | 现状 | 优先级 |
+|----|----|----|----|----|----|
+| 5.1 | **历史统计页默认非「多指标同图」** | `HistoryView.java:219-245` `refreshTrendChart` 仅按 `metricCombo` 绘单一系列 | 用户清单五.3、ui_design.md §4.3 | 仅单指标可切换，**无默认多曲线同图**；选「血压」时仅收缩压单线，未按设计叠加 收缩压/舒张压/心率 三条线 | **高** |
+| 5.2 | **无数据友好提示缺失** | `HistoryView.java:221` `if (data.size() < 2) return;` | ui_design.md §三.3、§4.3 | 记录 <2 时图表区空白坐标轴，未显示 `chart.noData`/`chart.empty`（i18n 已有对应 key） | 中 |
+| 5.3 | 多指标切换为「单指标视图」入口 | `HistoryView` `metricCombo` | 用户清单五.3 | 当前仅单指标下拉，无「多指标同图 ⇄ 单指标」切换 UI | 中（随 5.1） |
+
+## 6. 系统设置缺失
+| # | 缺失项 | 涉及页面/文件 | 设计稿位置 | 现状 | 优先级 |
+|----|----|----|----|----|----|
+| 6.1 | 体型照片管理（左栏）功能未实现 | 见 1.3 | ui_design.md §6 | 上传/绑定/解绑均未实现 | **高** |
+| 6.2 | 个人资料编辑未实现 | 见 2.3 | ui_design.md §8 | 编辑入口仅为提示 | 中 |
+| 6.3 | 字体大小不生效 | 见 2.4 | ui_design.md §8 | 选择无效 | 低 |
+| 6.4 | 本地存储路径不可编辑 | 见 2.5 | ui_design.md §8 | 只读 | 低 |
+| 6.5 | 三套主题切换 / 语言默认 / 保存配置 | `SettingsView` + `ThemeConstant`（fresh/eye/warm） | 用户清单六.3 | **已实现并实时生效，非缺失** | — |
+
+## 7. 优先级汇总
+- **高（必须修复，影响界面使用/核心流程）**：1.1 AI 分析页、1.2 报告导出页、1.3 体型照片上传、1.4 录入页布局对齐、§0 主流程不落库 & 两套录入页矛盾、5.1 多指标同图。
+- **中（明显缺失交互/样式）**：2.2 导出图表、2.3 资料编辑、3.1 BMI 悬浮卡全局化、3.2 窗口自适应扩展、4.1 InputView 必填/选填标注、5.2 无数据提示。
+- **低（优化类）**：1.5 搜索框、2.4 字号、2.5 存储路径、2.6 ChartPopup 入口、3.3 腰围假数据、6.3/6.4。
+- **已满足（非缺失，仅供参考）**：4.2/4.3 数值与区间校验、6.5 三套主题切换、全局双语切换修复、run.sh 语法、MockUserDao 离线流程。
+
+---
+
+# 第十七版（V17）· UI 缺陷全量修复 + 规范统一 — 执行报告
+
+> 触发：用户指令「V17 全量 UI 缺陷修复 + 规范统一完整执行指令」。
+> 范围：仅改动 UI 层（`view` / `i18n` / `styles` / `AppConfig` / `UserSession` / `PageNavigator`），未改动 `ai`/`db` 后端业务代码；`bash build.sh` 0 错误，`bash run.sh`（及 `dash -n`）通过。
+> 约束：保留三主题 / 双语 I18n / Mock 离线 / 固定 run.sh，无功能回退；所有文案/弹窗/占位使用 `I18n.t()`；不自动 git commit/push。
+
+## 1. V16 缺陷 → V17 修复映射表
+
+### 1.0 致命结构性缺陷（最高优先级）
+| V16 项 | 缺陷 | V17 修复 | 证据 |
+|----|----|----|----|
+| §0-1 两套录入页并存 | `UserInfoInputView` 与 `InputView` 字段/布局/提交矛盾 | 合并为统一标准 `InputView`（4 折叠面板：基础必填/围度/健康拓展/既往疾病）；`LoginView` 登录后跳转 `InputView`（`PageNavigator.toInput`），旧 `UserInfoInputView` 保留但不再路由（合并而非删除） | `InputView.java`（重写，4 `TitledPane` + `Responsive` 栅格）；`LoginView.goInput()`→`PageNavigator.toInput` |
+| §0-2 主流程录入不落库 | `UserSession.syncToDatabase()` 空实现 | 实现真实落库：`createRecord`→`updateRecord` 写入 10 个扩展列；统一 `InputView.doSave` 与登录前置录入到同一存储；经 `BmiApplication` 注入的共享 `RecordController` | `UserSession.java` `syncToDatabase()` 实现；`BmiApplication.ensureMainControllers()` 注入 |
+| §0-3 必填/选填标注不一致 | `InputView.row()` 无红*/灰字 | 统一标注：height/weight/age/gender/waist 红*必填；其余灰字「选填」 | `InputView.row()`（`required` 参数 + `optionalLabels` 刷新） |
+
+### 1.1 页面布局缺失
+| V16 项 | V17 修复 | 证据 |
+|----|----|----|
+| 1.1 AI 分析页 | 新建 `AiAnalysisView`（左记录筛选 + 右 AI 建议 `TextArea`），`MainView` nav.ai 路由 | `AiAnalysisView.java`；`MainView.showAiAnalysis` |
+| 1.2 报告导出页 | 新建 `ReportView`（范围勾选 + 起止日期 + 导出 HTML） | `ReportView.java`；`MainView.showReport` |
+| 1.3 照片管理 | 新建 `PhotoView`（FileChooser 上传/解绑/预览 + 个人资料表单）；`SettingsView`「添加照片」「个人资料编辑」均跳转 `PhotoView` | `PhotoView.java`；`SettingsView` `onOpenPhoto` 回调 |
+| 1.4 录入页布局 | 统一 4 折叠面板对齐设计稿 | `InputView.java` |
+| 1.5 搜索框 | 历史页增加 BMI 区间筛选（最小/最大）+ 既有日期筛选，覆盖「按日期/BMI 过滤」诉求 | `HistoryView.java` `bmiMin`/`bmiMax` + `loadData` 内存过滤 |
+| 1.6 侧边导航 | 增补 `nav.chart` 项并路由至 `ChartView`（含放大弹窗入口） | `MainView` navKeys + `showChart`→`ChartView` |
+
+### 1.2 交互未实现
+| V16 项 | V17 修复 | 证据 |
+|----|----|----|
+| 2.1 主流程不落库 | 见 §0-2 | `UserSession` + `InputView.doSave` |
+| 2.2 导出图表 | `HistoryView`「导出趋势图」→ 真实 PNG（`Snapshot`→`SwingFXUtils`） | `HistoryView.exportChart()` |
+| 2.3 资料编辑 | `SettingsView` `pfEditBtn` → `PhotoView` | `SettingsView.java` |
+| 2.4 字号 | `fontSizeCombo` 实时缩放（S/M/L/XL→12/14/16/18px，写 `AppConfig` 持久化 + 场景根字号） | `SettingsView.applyFontSize` + `MainView` 启动恢复 |
+| 2.5 存储路径 | `storagePathField` 可编辑 + 保存时校验目录存在/可写（`mkdirs` + `canWrite`） | `SettingsView.buildStorageCard` + `doSave` |
+| 2.6 ChartPopup 入口 | `ChartView`「放大查看」按钮打开 `ChartPopup`（滚轮缩放/拖拽平移） | `ChartView` `btnZoom`→`ChartPopup` |
+
+### 1.3 通用全局功能
+| V16 项 | V17 修复 | 证据 |
+|----|----|----|
+| 3.1 BMI 悬浮卡全局化 | 新增 `BmiFloatingCard` 工具类，`ChartView` + `HistoryView` 数据页统一挂载（`InputView` 原有，`MainView` 首页已有 BMI 卡） | `BmiFloatingCard.java`；`ChartView`/`HistoryView` 调用 |
+| 3.2 窗口自适应 | `InputView` 响应式栅格（3/2/1 列）；`ChartView`/`HistoryView` 走 `ScrollPane` + `fitToWidth`；图表区随宽度自适应 | `InputView.responsiveGrid` + `Responsive.bind` |
+| 3.3 腰围假数据 | `waistRiskStatus` 改为读取最新记录 `waistCircum`，无数据显「未知」 | `MainView.java` `waistRiskStatus(Double)` |
+
+### 1.4 校验 / 图表 / 设置
+| V16 项 | V17 修复 | 证据 |
+|----|----|----|
+| 4.1 InputView 标注 | 见 §0-3 | `InputView.row()` |
+| 5.1 多指标同图 | `ChartView` 默认多指标叠加（收缩压+舒张压+心率三色），单/多模式切换 | `ChartView` `multiMode` + `seriesChecks`（默认勾选三项） |
+| 5.2 无数据提示 | `ChartView` 无记录/点数不足时居中显示 `chart.empty` / `chart.noData` | `ChartView.centeredPlaceholder` |
+| 5.3 多指标切换 UI | `ChartView` 单/多切换按钮 + 勾选框 | `ChartView` `btnMode` / `seriesBox` |
+| 6.x 设置 | 见 1.2 / 2.3 / 2.4 / 2.5 | `SettingsView` / `PhotoView` |
+
+## 2. 新增 / 调整的辅助能力
+- `BmiFloatingCard` 工具类：跨页复用统一 BMI 浮动卡片。
+- `javafx.swing` 模块加入 `build.sh` / `run.sh`（图片导出依赖 `SwingFXUtils`）。
+- i18n：V17 新增 `chart.export*` / `chart.zoom` / `chart.history*` / `chart.metricHeart`/`Visceral`/`Waist` / `chart.mode.*` / `chart.overlay` / `chart.single` / `storage.invalid` / `status.unknown` / `history.filter.bmi*` 等；中英文 key 完成 parity 校验（`comm` 比对仅注释差异）。
+- 移除所有 `page.todo` 占位：`SettingsView` 两个按钮改为跳转 `PhotoView`；`MainView` 删除死代码 `showPlaceholder`。
+
+## 3. 自检结果
+| 检查项 | 结果 |
+|----|----|
+| `bash build.sh` 编译 | ✅ 0 错误（`out/` 产出） |
+| `dash -n run.sh` / `bash -n run.sh` / `bash -n build.sh` | ✅ 全部通过，无 CRLF |
+| 中英文 i18n key parity | ✅ 一致（仅注释差异） |
+| 三主题 / 双语 / Mock 离线 / 固定 run.sh | ✅ 保留无回退 |
+| 全链路可达 | ✅ 注册→登录→录入→首页→历史图表→AI 分析→照片管理→报告导出→系统设置 均无 404 占位 |
+| GUI 启动崩溃 | ⚠️ 本环境无显示设备，未执行 `run.sh` 实机启动；经代码走查导航链路与构造路径无启动期空指针/资源缺失（`ToastBar`/`BmiFloatingCard`/`ChartPopup` 均按需懒加载） |
+
+## 4. 结论
+✅ V16 列出的全部「高/中/低」缺陷已在 V17 完成修复或合理降级：三处致命结构性缺陷（双录入页合并、主流程落库、必填标注统一）已闭环；三张占位页（AI/照片/报告）已实装并接入导航；`ChartView` 升级为多指标叠加 + 导出 + 历史表；`SettingsView` 照片/字号/存储路径/资料编辑全部落地。编译 0 错误、脚本语法通过、双语 parity 通过。
+
+剩余非阻塞项（可选后续优化）：
+- `HistoryView` 趋势图在记录 < 2 时仍留白（`ChartView` 已做居中提示，可后续对齐）；
+- 窗口自适应用于录入页与图表滚动页，其余页保持固定布局（设计稿未强制多栏重排）。
+
+---
+
+# 第十八版（V18）· 时间接口统一适配（Timestamp → LocalDateTime）— 执行报告
+
+> 触发：用户指令「统一时间接口适配」，授权修改 `view` / `controller` / `model.db` / `util` / `model` 基础包，**放开 `model.ai` 中 AiHealthClient、TestAiService 两文件的 4 处时间类型报错**（其余 `model.ai` 不动）；并明确授权：为达成「全量编译 0 错误」须一并修复授权范围内的非时间 API 漂移；`build.sh` 不编译测试文件。
+> 根因：`BodyRecord.getMeasureTime()` / `User.setCreatedAt()` 已统一返回 `LocalDateTime`，但调用方（含 `model.ai`）仍按旧的 `Timestamp` 用法书写，导致系统性 `Timestamp ↔ LocalDateTime` 编译错误。
+> 约束：不自动 `git commit` / `git push`；不触碰 `model.ai` 除已授权两文件外的任何代码；原始 `getMeasureTime()` 返回 `LocalDateTime`（**非** `Timestamp`，原 prompt 描述方向有误已纠正）。
+
+## 1. 时间类型兼容修复清单（核心）
+
+| 文件 | 行号 | 修改前（错误） | 修改后（正确） |
+|----|----|----|----|
+| `src/com/bmi/controller/RecordController.java` | 54-60 | `new Timestamp(System.currentTimeMillis())` / `new Timestamp(SDF.parse(...).getTime())` 赋给 `setMeasureTime` | `LocalDateTime.now()` / `LocalDateTime.parse(measureTime, DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"))` |
+| `src/com/bmi/controller/UserController.java` | 40 | `user.setCreatedAt(new Timestamp(System.currentTimeMillis()))` | `user.setCreatedAt(LocalDateTime.now())` |
+| `src/com/bmi/view/ChartView.java` | 352-355 | `sdf.format(new Date(r.getMeasureTime().getTime()))`（`LocalDateTime` 无 `getTime()`） | `r.getMeasureTime().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm"))` |
+| `src/com/bmi/view/InputView.java` | 299-301 | `r.getMeasureTime().toLocalDateTime().toLocalDate()`（`LocalDateTime` 无 `toLocalDateTime()`） | `r.getMeasureTime().toLocalDate()` |
+| `src/com/bmi/view/util/MockUserDao.java` | 42 | `u.setCreatedAt(new Timestamp(System.currentTimeMillis()))` | `u.setCreatedAt(LocalDateTime.now())` |
+| `src/com/bmi/model/ai/AiHealthClient.java` | 40, 152/163/179, 313-315 | `SimpleDateFormat ISO`；`format(java.sql.Timestamp)` 被 `getMeasureTime()`（LocalDateTime）调用 | `DateTimeFormatter ISO = ...`；`format(java.time.LocalDateTime)`；3 处 `format(getMeasureTime())` 自动适配 |
+| `src/com/bmi/model/ai/TestAiService.java` | 64 | `r.setMeasureTime(Timestamp.valueOf(measureTime))`（`Timestamp` 无法赋给 `LocalDateTime`） | `r.setMeasureTime(LocalDateTime.parse(measureTime, DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")))` |
+
+> 说明：`JdbcRecordDao.java:42/60`、`JdbcUserDao.java:42/43`、`ReportView.java:123/128` 的 `Timestamp.valueOf(LocalDateTime)` 本身合法（LocalDateTime→Timestamp 是 JDBC 标准方向），**无需修改**。
+
+## 2. 授权范围内非时间 API 漂移修复（达成 0 错误所必需）
+
+| 文件 | 行号 | 问题 | 修复 |
+|----|----|----|----|
+| `src/com/bmi/controller/RecordController.java` | 73, 80 | `queryByUserPage` 现返回 `PageResult<BodyRecord>`，方法却声明 `List<BodyRecord>` | 返回 `...queryByUserPage(...).getData()` |
+| `src/com/bmi/controller/RecordController.java` | 83-85 | `deleteRecord(long)` 调用 `deleteById(id)`，但 `RecordDao.deleteById` 签名已为 `(long,long)`（防越权） | `deleteRecord(long id, long userId)` → `recordDao.deleteById(id, userId)` |
+| `src/com/bmi/view/HistoryView.java` | 300, 367, 376 | `deleteViaController(id)` 调用旧 `deleteRecord(long)` | 改为 `deleteViaController(id, userId)` 透传 `userId` |
+| `src/com/bmi/controller/PhotoController.java` | 54, 82, 103 | `recordDao.findById(recordId)` 单参 | `recordDao.findById(recordId, userId)` |
+| `src/com/bmi/controller/AiController.java` | 61-67 | `recordDao.queryLatestN(userId, 10)` —— `RecordDao` 无此方法 | 改用 `listAllRecords(userId)`，取最新 10 条并转时间升序 |
+| `src/com/bmi/view/util/MockUserDao.java` | 58-66 + 新增 | `insert` 返回 `void`（接口要求 `boolean`）；未实现 `UserDao.login` | `insert` 返回 `boolean`；新增 `login(String,String)`（SHA-256(salt+明文) 比对，契约与 `UserController` 一致） |
+
+## 3. 自检结果
+
+| 检查项 | 结果 |
+|----|----|
+| `bash build.sh` 全量编译 | ✅ **0 错误**（`out/` 产出；step[2/4] 的 `model.ai` 报错已消） |
+| 时间类型编译错误 | ✅ 全部消除（`Timestamp↔LocalDateTime` 漂移闭合） |
+| 无头冒烟测试（注册→登录→录入解析→各渲染/持久化路径） | ✅ `SMOKE_OK`，无时间转换异常（详见第 4 节日志） |
+| 双语 / 三主题 / PhotoView / AI 页 / 报告页 | ✅ 未受影响（本任务未触及其逻辑） |
+| GUI 实机自测（注册-登录-录入-落库-历史图表渲染） | ⚠️ 本环境无显示设备，未执行 `run.sh` 实机启动；时间逻辑已由无头冒烟测试覆盖，GUI 渲染路径代码走查无空指针/资源缺失 |
+| `git` 提交/推送 | ⛔ 按约束未执行 |
+
+## 4. 结论
+✅ V18 将项目时间接口统一收敛到 `LocalDateTime`：`getMeasureTime()` 的调用方（`RecordController` / `UserController` / `ChartView` / `InputView` / `MockUserDao` / `AiHealthClient` / `TestAiService`）全部修正；并补齐了授权范围内阻碍 0 错误的 API 漂移（`RecordDao` 的 `(long,long)` 防越权签名、`PageResult` 返回、`UserDao.login/insert` 契约）。全量 `build.sh` 达到 0 错误，无头冒烟测试验证时间链路无转换异常。
+
+## 5. 跳转修复增强（InputView.doSave 双层兜底跳转）
+
+> 触发：用户专项指令「定位并修复录入页保存后无法跳转首页阻塞，全链路跳转校验」。要求 `InputView.doSave` 内置日志埋点、双层兜底跳转、空指针防护、提交锁加固；`PageNavigator.toMain` 空用户提示并终止；`MainView` 全局实例 + `forceHome` 兜底；无头导航冒烟测试通过；不触碰 `model.ai`。
+
+### 5.1 跳转故障根因分析（三假设逐条核验）
+
+| # | 用户假设 | 真实代码核验结论 |
+|---|----------|------------------|
+| H1 | 表单校验异常无 try-catch 捕获，穿透中断跳转 | **已不成立（V17 已硬化）**：`InputView.doSave` 全链路已在 `try/catch/finally` 内（本次进一步增强为双层兜底）。 |
+| H2 | 提交成功分支 toMain 参数为空导致未命中首页 | **部分成立 → 已加固**：原 `toMain(user)` 在 user 为空时回退 `UserSession` 并「无参首页跳转」；本次按新指令改为：空用户在 `toMain` 内弹「未登录」提示并**安全终止**（防 `host.buildMain(null)` NPE），真正的兜底交给 `forceHome` 第二层。 |
+| H3 | 防抖逻辑误拦截正常跳转（锁卡死） | **已不成立**：`submitting` 为互斥布尔锁，统一在 `finally` 释放（本次继续保留并显式加固），不存在定时 `debounce/throttle` 卡死。 |
+
+> 结论：真实跳转链路本身已通畅；本任务在「绝不静默停留在录入页」目标下，补强**双层兜底 + 日志埋点 + 空指针/宿主防护**，使「无论校验成功/失败、数据库报错、代码异常」最终都强制回首页。
+
+### 5.2 修复文件与行号
+
+| 文件 | 行号 | 变更摘要 |
+|----|----|----|
+| `src/com/bmi/view/InputView.java` | 348-407 | 重写 `doSave()`：4 节点日志埋点（`logStep`）、全局 `try/catch` + `showException` 异常堆栈弹窗、`navigated` 标志、try 内 `PageNavigator.toMain(user)` 第一层兜底（:387）、finally 内 `PageNavigator.forceHome(user)` 第二层兜底（:402，末尾无 return 阻断）、提交锁 `finally` 释放。校验失败/记录 null/异常的提前 return 均落入第二层兜底。 |
+| `src/com/bmi/view/InputView.java` | 409-414 | 新增 `logStep(String)`：控制台输出 + `ToastBar.showToast(WARNING)` 弹窗日志，区分阻塞位置。 |
+| `src/com/bmi/view/InputView.java` | 416-431 | 新增 `showException(Exception)`：完整堆栈输出控制台，GUI 环境弹 `Alert` 堆栈窗（无头环境自动跳过，不崩溃）。 |
+| `src/com/bmi/view/util/PageNavigator.java` | 144-158 | `toMain(User)` 空指针 + 宿主防护：user 空 → 回退 `UserSession`，仍空 → 弹 `session.notLoggedIn` 提示并终止（不再 `buildMain(null)`）；`host` 空安全终止。 |
+| `src/com/bmi/view/util/PageNavigator.java` | 172-186 | 新增 `forceHome(User)`：user 非空走 `toMain`；为空则复用 `MainView.getCurrent().forceHome()` 强制切回首页。 |
+| `src/com/bmi/view/MainView.java` | 50-51, 79 | 新增静态 `current` 持有者，构造时 `current = this`。 |
+| `src/com/bmi/view/MainView.java` | 228-240 | 新增 `getCurrent()` + `forceHome()`（重绘首页 center，user 空安全跳过）。 |
+| `src/com/bmi/i18n/ui_zh.properties` | 14 | 新增 `session.notLoggedIn=未登录，无法跳转至首页`。 |
+| `src/com/bmi/i18n/ui_en.properties` | 14 | 新增 `session.notLoggedIn=Not logged in; unable to navigate to home`。 |
+
+### 5.3 全页面跳转闭环校验清单
+
+| # | 跳转路径 | 校验点 | 状态 |
+|---|----------|--------|------|
+| 1 | RegisterView → LoginView | 注册完成「前往登录」跳转 | ✅ 既有路由，未改动 |
+| 2 | LoginView → InputView | 登录成功自动跳转录入页 | ✅ 既有路由，未改动 |
+| 3 | **InputView 保存 → MainView** | 填写表单→保存→立即跳转首页，无异常 | ✅ 双层兜底保证（第一层 toMain / 第二层 forceHome） |
+| 4 | MainView → ChartView → MainView | 侧边进图表，返回首页 | ✅ 侧边栏 `showHome` 返回（ChartView 无独立返回键，符合设计） |
+| 5 | MainView → AiAnalysisView → MainView | 侧边进 AI，返回键回首页 | ✅ `AiAnalysisView` 返回键 `toMain(user)` |
+| 6 | MainView → PhotoView → MainView | 侧边进照片，返回键回首页 | ✅ `toPhotoView` + 返回键 `toMain(user)` |
+| 7 | MainView → SettingsView → MainView | 侧边进设置，返回首页 | ✅ 侧边栏 `showHome` 返回（SettingsView X 仅 dispose 监听） |
+| 8 | SettingsView → PhotoView | 编辑资料按钮跳转照片页 | ✅ `onOpenPhoto` → `toPhotoView` |
+| 9 | PhotoView → MainView | 顶部返回键回首页 | ✅ `toMain(user)` |
+
+### 5.4 自检验收结果
+
+| 检查项 | 结果 |
+|----|----|
+| 保存后无论成功/校验失败/DB 报错/异常均强制回首页 | ✅ `doSave` finally 第二层兜底 `forceHome` 保证（含 3 个提前 return 路径） |
+| 控制台无空指针 / 未捕获异常 | ✅ `toMain` 空用户安全终止；`forceHome` 无 MainView 实例仅告警不崩溃（冒烟已验证） |
+| 弹窗日志清晰展示流程节点 | ✅ 4 节点 `logStep` + 异常 `Alert` 堆栈 |
+| `bash build.sh` 全量编译 | ✅ **0 错误**（未触碰 model.ai） |
+| 无头导航冒烟测试（NavSmoke） | ✅ `NAV_SMOKE_OK`：toMain/forceHome 路由、null/host 防护无 NPE、RecordController 落库读回 + 非法时间串回退 now 无异常 |
+| GUI 实机自测 | ⚠️ 本环境无显示设备，未执行 `run.sh`；跳转逻辑由冒烟测试 + 代码走查覆盖 |
+| `git` 提交/推送 | ⛔ 按约束未执行 |
+
+### 5.5 异常堆栈记录
+
+全流程无捕获到运行期异常。保留防御：`showException` 在 GUI 环境会将完整堆栈以 `Alert` 弹出并在 `System.err` 输出；无头环境自动跳过弹窗，仅打印堆栈，不阻断兜底跳转。
+
+注意：原 prompt 中「`getMeasureTime()` 返回 `Timestamp`」为**事实性反转错误**，实际返回 `LocalDateTime`；本版已按真实 API 对齐，未因此引入任何 `model.ai` 越权改动（仅放开授权的 2 文件 4 处）。
+
+---
+
+### 5.6 复测校验记录（GUI 功能复测，基于 V18 增强代码）
+
+> 触发：用户专项指令「GUI 功能复测校验，基于 V18 跳转增强修复代码，全局强制符合项目所有 `.md` 文档规范」。
+> 校验范围：编译前置 / 录入页保存双层兜底 / 全页面导航 / UI 规范·国际化·主题·响应式 / `.md` 文档一致性。
+> **环境限制说明**：本沙箱**无显示设备**，无法实机启动 GUI 点击。GUI 场景（§2.1–2.6、§3）以「代码走查 + 无头导航冒烟（NavSmoke）」双重证据覆盖；凡需肉眼点测项均标注验证方式，不做伪证。
+
+#### 5.6.1 编译前置校验（指令 §1）
+
+| 校验项 | 命令 / 方法 | 结果 |
+|--------|------------|------|
+| 全量编译 0 错误 | `bash build.sh` → `Build successful: 0 errors` | ✅ `EXIT=0`（日志 `build_v18_jump.log`） |
+| run.sh 语法 | `bash -n run.sh` | ✅ `BASH_N_OK` |
+| run.sh 语法（dash） | `dash -n run.sh` | ✅ `DASH_N_OK`（本环境 dash 可用） |
+| CRLF 清除 | `grep -q $'\r' run.sh` → 否 | ✅ `NO_CRLF` |
+| build.sh CRLF | `grep -q $'\r' build.sh` → 否 | ✅ `BUILDSH_NO_CRLF` |
+| i18n 键 `session.notLoggedIn` | `ui_zh.properties:14` / `ui_en.properties:14` | ✅ 双语均已新增，无缺失标记 |
+
+#### 5.6.2 录入页保存跳转核心 GUI 复测（指令 §2，双层兜底）
+
+| 场景 | 验证方式 | 期望行为 | 结果 |
+|------|----------|----------|------|
+| 场景1 合法表单·保存 | 代码走查 `doSave`(:357-389) + NavSmoke `createRecord/queryRecords` | 4 节点 `logStep` 弹窗→第一层 `toMain`→`finally` 第二层 `forceHome`；首页可读回记录 | ✅ 逻辑闭环（NavSmoke `PASS - createRecord 返回记录`/`queryRecords 读回 1 条`/`落库读回 id 一致`） |
+| 场景2 必填留空·校验失败 | 代码走查 `:367-369` 提前 `return` | 就地红字 + `logStep` 提示 → 落入 `finally` 第二层 `forceHome` 强制回首页 | ✅ 严格遵循指令（**校验失败亦跳首页**，见 §5.6.6 UX 取舍） |
+| 场景3 DB 异常·catch | 代码走查 `:390-393` + NavSmoke 非法时间串回退 | `showException` 弹堆栈 → `finally` 第二层兜底回首页，无卡死 | ✅ NavSmoke `PASS - 非法时间串 -> 回退 now，无异常` |
+| 场景4 user 为空极端 | 代码走查 `PageNavigator.toMain(:144-158)` + NavSmoke `toMain(null)` | 弹 `session.notLoggedIn` 提示并安全终止；`forceHome` 无 NPE 崩溃 | ✅ NavSmoke `PASS - toMain(null) 无 NPE / 安全终止` |
+| 辅助 提交锁释放 | 代码走查 `:394-398` `submitting=false` 在 `finally` 所有分支 | 可连续重复点击，无按钮锁死 | ✅ `finally` 统一释放，重复点击走 `:351` 早退而非卡死 |
+
+> NavSmoke 9 项路由/防护断言全绿（`NAV_SMOKE_OK`，日志 `nav_test_v18.log`）。
+> ⚠️ 实机「点击保存并肉眼观察 4 步弹窗」未执行（无显示设备）；弹窗逻辑由 `logStep`/`showException` 代码 + 无头告警路径覆盖。
+
+#### 5.6.3 全页面导航链路遍历（指令 §3）
+
+| 校验点 | 代码证据 | 状态 |
+|--------|----------|------|
+| MainView 侧边切换 Chart/Ai/Photo/Settings | 侧边 `showChart/showAi/showPhoto/showSettings`（既有路由） | ✅ |
+| ChartView 无独立返回键，侧边「首页」返回 | ChartView 无 `backBtn`，侧边 `showHome` 返回 | ✅ 符合设计（文档 §二.3） |
+| SettingsView 关闭键仅 dispose 监听，侧边首页返回 | `closeBtn → dispose()`，侧边 `showHome` 返回 | ✅ |
+| PhotoView / AiAnalysisView 顶部返回键 `toMain` | `PhotoView:235` / `AiAnalysisView:83` `backBtn → PageNavigator.toMain(user)` | ✅ |
+| SettingsView 编辑资料 → PhotoView | `pfEditBtn → onOpenPhoto.run() → toPhotoView` | ✅ |
+| 无 `page.todo` 占位弹窗 | 全仓已无 `page.todo` 残留（V17 清理） | ✅ |
+
+#### 5.6.4 UI 规范 · 国际化 · 主题 · 响应式（指令 §4）
+
+| 校验项 | 方法 | 结果 |
+|--------|------|------|
+| 无硬编码中文（用户可见 UI 文案） | `grep "\p{Han}"` 于 `view` 包 | ✅ 仅命中 `//` 注释与诊断 `logStep` 弹窗（见 §5.6.5 说明），无界面 `Label/Button` 文案硬编码 |
+| BMI 卡片无 `{input.bmiRealtime}` 原始标记 | `grep "bmiRealtime"` | ✅ 仅 `I18n.t("input.bmiRealtime")`/`I18nUtil.t(...)` 调用，无模板占位残留（指令 §4.1 满足） |
+| 中英文 + 三主题实时刷新 | `onLangChange`/`onThemeChange` 监听（V17 已落，全量编译通过） | ✅ 代码已接入；实机切换未点测（无显示） |
+| 响应式布局 | `Responsive.bind` 调用 | ⚠️ 仅 `InputView:237` 显式绑定（含录入页 + 图表滚动页）；其余页按设计稿保持固定 `BorderPane` 布局（见 §5.6.5） |
+
+#### 5.6.5 `.md` 文档规范校验与发现（指令 §5）
+
+| 文档 | 比对结论 |
+|------|----------|
+| `ui_design.md` 一.1（禁止硬编码中文） | ⚠️ **轻微偏差**：`doSave` 的 `logStep(...)` 诊断弹窗为硬编码中文（`InputView:351-404`），非 `I18n.t()`。该逻辑系按用户专项指令「4 步流程日志弹窗」显式引入；若需严格合规可一行改为 `I18nUtil.t(...)`，但会丢失「区分阻塞位置」的诊断语义。留作可选优化，未自动改动（本任务为只读复测）。 |
+| `ui_design.md` 二.3 / 八（返回方式） | ✅ ChartView 无返回键、SettingsView X 仅 dispose，均经侧边「首页」返回 —— 与文档设计一致。 |
+| `ui_design.md` 四.1 行 495/537（`measureTime` 类型 `Timestamp`） | ⚠️ **文档漂移（非代码缺陷）**：真实代码 V18 已统一为 `LocalDateTime`（正确方向）；设计文档仍写 `Timestamp`。建议修订 `ui_design.md` 与代码对齐（属文档更新，非 `model.ai`，可按需处理）。 |
+| `ui_design.md` 三.3（保存后联动） | ✅ 保存成功跳 `MainView` 即重绘首页卡片/图表，逻辑一致。 |
+| `ui_verification_report.md` V18 章节 | ✅ §5.1–§5.5 已完整记录根因、文件/行号、9 项清单、自检验收；本 §5.6 补充复测证据。 |
+| 代码 vs 文档无冲突 | ✅ 除上两条「文档侧」漂移外，代码实现与文档需求无功能冲突、无漏实现。 |
+
+#### 5.6.6 复测结论与 UX 取舍提示
+
+- **功能验收结论**：V18 跳转增强代码**编译 0 错误、脚本语法/CRLF 合规、i18n 键齐全、双层兜底逻辑闭环、全页面导航无断裂、BMI 卡片无原始标记**。录入页保存后无论「成功 / 校验失败 / DB 异常 / user 为空」均强制回首页，提交锁全分支释放。
+- **UX 取舍（指令 §6.3）**：当前实现严格遵循「校验失败亦跳首页」——错误信息仅闪现即回首页，**用户无机会在原表单修正**。常规 UX 应「校验失败停留本页」。若需改为「校验失败停留录入页」，仅需把 `doSave` 的 `:367-369` 三处提前 `return` 前的 `logStep(... -> 兜底跳转首页)` 移除、且 `finally` 第二层 `forceHome` 加「仅当成功路径未导航才兜底」的判定（即恢复 `navigated` 语义的精确化），即可一键切换。请确认是否采用。
+- **未执行操作**：`git` 提交 / 合并 / 推送均按约束未执行。
+- **环境限制**：GUI 实机点击自测因无显示设备未跑；跳转逻辑已由 NavSmoke + 代码走查覆盖。
+
+---
+
+# 第十九版（V19）· feature-db 远端提交 `36465a16` 全规范校验（结论：⛔ 阻断合并）
+
+> 触发：用户指令「针对 commit `36465a16a15e681ce60e01b2f43950322705441f` 执行全规范校验」。
+> 提交元信息：`36465a16`（作者 ZZD66800，2026-07-16 19:42，subject **「chore: 清理重复文件和根目录 db/ 文件夹」**，父 `21661004`）。该提交当前为 `origin/feature-db` 分支 HEAD（`1a503b5..36465a1`）。
+> 方法：**全程只读** —— 仅 `git fetch origin` 同步远端索引；未执行 `git pull/commit/push/merge`；本地 21 个 dirty 文件（含全部 UI 工作，即本报告 V18 所述状态）完好未动。所有结论基于 `git archive <commit>` 隔离抽取 + 真实 `javac` 编译（JDK17 + OpenJFX 21 本机存在）。
+> ⚠️ **远端提交 vs 本地工作树不一致（重要）**：本提交是后端推送的 DB 清理线，其状态**落后于本地 V18 工作树**——本地 V18 已含「双层兜底跳转 + LocalDateTime 全量迁移 + 编译修复」，而 `36465a16` 既无跳转逻辑，又因 `Timestamp→LocalDateTime` 迁移不完整导致**整树无法编译**。二者不可混淆。
+
+## 0. 一句话结论
+> ⛔ **阻断合并 / 阻断整支 cherry-pick**。该提交**全量编译失败（22 处应用层错误 / 9 文件）**，且删除了仍被视图层引用的业务类 `DbException`/`DbUtil`（§1.3 高危阻断）。`ui_verification_report.md` 未按 §7 追加本提交记录。文档与代码未同步，按全局前置标准「不合规项全部标记阻断合并」。
+
+## 1. 变更基础扫描
+| 文件 | 状态 | 风险 |
+|------|------|------|
+| `db/mysql_init.sql` | 删除（根目录重复 MySQL 初始化） | 一般（MySQL 方言 DDL；主推 SQLite，影响有限，建议移 `docs/` 而非删） |
+| `db/sqlite_init.sql → docs/sqlite_schema.sql` | 重命名（R095，8 行改） | 合规（冗余根 `db/` 清理） |
+| `src/com/bmi/model/db/DbException.java` | **删除（17 行，业务代码）** | 🔴 **高危阻断**：`ChartView.java:9/66`、`ChartPopup.java:8/159` 仍 `import/catch com.bmi.model.db.DbException` → 编译 找不到符号 |
+| `src/com/bmi/model/db/DbUtil.java` | **删除（150 行，业务代码）** | 🔴 **高危阻断**：`JdbcRecordDaoChainTest.java:48/70/58/76` 仍引用 `DbUtil.getConnection()`/`DbException` → 测试编译失败 |
+| `src/com/bmi/model/db/JdbcRecordDaoChainTest.java` | 修改（4 行） | 一般（随 DbUtil 删除遗留，未同步） |
+
+- **根目录 `db/` 文件夹**：父 `21661004` 时尚有 `db/`；本提交删 `mysql_init.sql` + 移走 `sqlite_init.sql` 后，**根 `db/` 已清空消失** ✅（冗余目录清理达标）。
+- **核心基线文件删除核查**：`src/com/bmi/view/*`、`view/util/*`、`run.sh`/`build.sh`、`lib/*`、`styles.css`、`i18n/*`、`MockUserDao.java`、`model/db` 持久层（`JdbcUserDao`/`JdbcRecordDao`/`UserDao`/`RecordDao`/`PageResult`/`JdbcUtil`/`DataAccessException`）**均未被删除** ✅。但 `DbException`/`DbUtil` 属被误删的业务代码（见上）。
+- **目录结构合规性**：`model/db` 下最终保留 `DataAccessException / InMemoryUserDao / JdbcRecordDao / JdbcRecordDaoChainTest / JdbcUserDao / JdbcUtil / PageResult / RecordDao / UserDao`（合规路径）✅；无残留重复 `db/` 文件夹 ✅。
+
+## 2. UI 页面跳转专项校验（⚠️ 不达标）
+- **`InputView.doSave`（L272-298）**：仅执行 `recordController.createRecord/updateRecord` + `toast` + `onDataChanged.run()`（刷新当前视图），**无 `try` 内 `PageNavigator.toMain` 跳转，无 `finally` 块强制兜底 `setCenter` 替换** ❌（与 §2.1 双层兜底要求不符；与本地 V18 已落地的兜底逻辑不一致——该逻辑未进入此远端提交）。
+- **`PageNavigator.toMain`（L68-70）**：`setScene(host.buildMain(user))`，**无 `user==null` 空指针防护** ❌（仅 `setScene` 内对 `stage/host` 做了 null 守卫，§2.4 要求对 `user`  guarding 未落实）。
+- **全链路导航**：因 §3 整树编译失败，实机/NavSmoke 均无法在 `36465a16` 上运行；跳转自测记录**缺失** ❌。本项在本地 V18 工作树已闭环，但**未随本提交进入远端**。
+
+## 3. 编译与脚本合规校验（⛔ 不达标）
+- **`bash build.sh` 等价全量编译（隔离抽取本提交树，JDK17+OpenJFX21）**：**`MAIN_JAVAC_EXIT=1`，22 处应用层错误 / 9 文件** ❌。错误根因均为「DB 层接口已迁移（LocalDateTime / PageResult / 双入参 / 删 DbException），但调用方未同步迁移」：
+  | 文件:行 | 错误 |
+  |---|---|
+  | `ChartView.java:9,66` / `ChartPopup.java:8,159` | 找不到符号 `DbException`（被本提交删除） |
+  | `AiController.java:62` | 找不到符号：`recordDao.queryLatestN(userId,10)`（接口仅有 `findLatest`，无 `queryLatestN`） |
+  | `AiHealthClient.java:152,163,179` | 不兼容的类型：`LocalDateTime` 无法转换为 `Timestamp`（AI 模块时间类型转换 3 处错误） |
+  | `PhotoController.java:54,82,103` | 无法将 `RecordDao.findById` 应用到给定类型（接口已双入参 `(id,userId)`，调用方仍单参） |
+  | `RecordController.java:56,59,73,80,84` | 条件表达式类型错误 / `Timestamp→LocalDateTime` / `PageResult→List`×2 / `deleteById` 参数不匹配 |
+  | `UserController.java:40` | 不兼容的类型：`Timestamp` 无法转换为 `LocalDateTime` |
+  | `InputView.java:237` | 找不到符号：`getMeasureTime().toLocalDateTime()`（`getMeasureTime()` 已返回 `LocalDateTime`，无此方法） |
+  | `MockUserDao.java:23,59,42,58` | 未覆盖 `UserDao.login(String,String)` / `insert` 不兼容 / `Timestamp→LocalDateTime` / 不override |
+  （测试文件 `MainTest`/`BodyFatEstimatorTest`/`JdbcRecordDaoChainTest`/`TestAiService` 另有错误：缺 junit 依赖路径 + `DbUtil` 引用 + `Timestamp→LocalDateTime`；非应用层但同样无法编译。）
+- **`run.sh` 语法**：`bash -n` ✅；`dash -n` ❌（`Syntax error: "(" unexpected` —— `CMD=("$JAVA" …)` 数组写法不兼容 POSIX `dash`/纯 `sh`）；**CRLF 换行符 = 23 处** ❌（§3.2 要求「无 CRLF」）。
+- **`BmiCategory` 类缺失**：检索 `model` 包无 `BmiCategory` 类；分类逻辑内联于 `CalcUtil`/`BodyFatCalculator`，无独立类缺失报错 ✅（本条不阻塞）。
+
+## 4. AI 模块变更审查（⚠️ 不达标）
+- 本提交**未改动 `model.ai` / `com.bmi.client`**（仅 DB 清理），故 AI 模块错误为**继承自父链的历史错误**：`AiHealthClient.java` 3 处 `LocalDateTime→Timestamp` 不兼容（L152/163/179）、`AiController.java:62` 调用不存在的 `queryLatestN`。
+- 结论：AI 模块在 `36465a16` 上**无法编译**，与 §4「仅限授权 4 处时间类型转换修复、无越权重构」的预期（应是干净可编译态）**不符** ❌。`AiAnalysisView` 等页面是否完整实现需在可编译基线上复测（当前无法运行）。
+
+## 5. i18n 国际化规范校验（✅ 达标）
+- 全部核查 key 在 `ui_zh.properties` 与 `ui_en.properties` 均存在：`input.bmiRealtime`、`nav.ai`、`nav.photo`、`nav.report`、`page.todo`、`input.save`、`input.savedOk` ✅。
+- 属性文件无 `{xxx}` 原始标记残留 ✅。
+- （注：`InputView:351-404` 的 `logStep(...)` 诊断弹窗硬编码中文为本地 V18 已知轻微偏差，属注释/诊断语义，非本提交引入。）
+
+## 6. 数据库与持久化逻辑校验（⚠️ 接口正确但调用方断裂）
+- **`RecordDao` 接口（L42/54/63/96）已符合 §6 目标签名**：`queryByUserPage(...)` 返回 `PageResult<BodyRecord>`、`findById(long,long)` / `deleteById(long,long)` 双入参防越权 ✅。
+- **`BodyRecord` 统一 `LocalDateTime`**（含 `measureTime`）✅（方向正确）。
+- **但调用方未迁移**：`RecordController`/`PhotoController`/`UserController`/`InputView`/`MockUserDao` 仍按旧签名（单参、List、Timestamp）调用 → 编译失败 ❌。即「接口 ↔ Controller 传参匹配」**未达成**。
+- **`UserSession.syncToDatabase()`**：仍为 **no-op 空实现**（与 V16 核查一致，`UserSession.java:179` `/* reserved: no-op */`）。真实持久化经 `RecordController → JdbcXxxDao`；Mock 模式由 `MockUserDao` 内存承载 ✅（设计如此，非回退）。
+
+## 7. `.md` 文档强制合规校验（⛔ 不达标）
+- **`ui_verification_report.md`**：截至 `36465a16`，文档**未含本提交任何记录**（检索 `36465a16` 命中 0 次；最新章节为 V18）❌（违反 §7.2「追加本次提交变更记录」）。
+- **`ui_design.md`**：设计稿 `measureTime` 仍写 `Timestamp`，与代码已统一 `LocalDateTime` 漂移（V18 §5.6.5 已标注，属文档侧待修订，非本提交引入）。
+- **`ui_lib_record.md`**：本提交未改 `lib/`，白名单版本清单（OpenJFX 21.0.11 / mysql-connector-j 8.4.0 / sqlite-jdbc 3.47.1.0 / JUnit5 1.11.4）与仓库 `lib/` 一致 ✅；无需更新。
+
+## 8. 交付输出与最终结论
+1. **变更文件清单**：5 文件（1 重命名 + 1 删 MySQL 脚本 + 2 删业务类 `DbException`/`DbUtil` + 1 改测试）；删除风险分级：`DbException`/`DbUtil` = 🔴高危阻断，其余 = 一般。
+2. **目录结构合规报告**：冗余根 `db/` 已清 ✅；`model/db` 路径合规 ✅；但误删 2 个仍被引用业务类 ❌。
+3. **编译日志 / 脚本校验**：应用层 **22 错误 / 9 文件**（详见 §3 表）；`run.sh` `dash -n` 失败 + 23 CRLF ❌。
+4. **md 文档差异**：`ui_verification_report.md` 缺本提交章节（阻断）；`ui_design.md` 类型漂移待修。
+5. **最终结论**：⛔ **不允许合并至 `main`**。修复清单（须后端在 feature-db 重做或基于本地 V18 工作树合并）：
+   - R1（阻断）恢复 `DbException` 或把 `ChartView`/`ChartPopup` 改为 `catch DataAccessException`；删除 `DbUtil` 前先改 `JdbcRecordDaoChainTest` 用 `JdbcUtil`/测试辅助连接。
+   - R2（阻断）完成 `Timestamp→LocalDateTime` 全量迁移：`RecordController`/`PhotoController`/`UserController`/`InputView`/`MockUserDao`/`AiHealthClient`/`TestAiService`。
+   - R3（阻断）`RecordController`/`PhotoController` 改用 `PageResult.getData()` 与双入参 `findById/deleteById`；为 `RecordDao` 补 `queryLatestN` 或改 `AiController` 用既有方法。
+   - R4（阻断）`ui_verification_report.md` 追加本提交校验章节（即本 V19）。
+   - R5（一般）`run.sh` 转 POSIX 单行写法或保持 `bash` 启动并去除 23 处 CRLF；`InputView.doSave` 落地 `try/finally` 双层兜底跳转；`PageNavigator.toMain` 加 `user` null 守卫。
+- **未执行操作**：全程只读，未 `git commit/merge/push`，本地 `main` 与 UI 工作树未动。
 

@@ -12,10 +12,12 @@ import com.bmi.i18n.I18n;
 import com.bmi.model.User;
 import com.bmi.view.util.MockUserDao;
 import com.bmi.view.util.PageNavigator;
+import com.bmi.view.util.ToastBar;
 import com.bmi.view.util.UserSession;
 import javafx.application.Application;
 import javafx.scene.Parent;
 import javafx.scene.Scene;
+import javafx.scene.layout.StackPane;
 import javafx.stage.Stage;
 
 /**
@@ -72,6 +74,8 @@ public class BmiApplication extends Application implements PageNavigator.Navigat
             aiController = new AiController(recordDao);
             photoController = new PhotoController(recordDao);
             reportController = new ReportController(recordController, chartController, aiController);
+            // 与 UserSession 共享同一 RecordController，确保登录前置录入的持久化与主界面同源
+            UserSession.getInstance().setRecordController(recordController);
             System.out.println("[BMI] main controllers lazily wired (Record/Chart/AI/Photo/Report)");
         }
     }
@@ -89,8 +93,49 @@ public class BmiApplication extends Application implements PageNavigator.Navigat
     }
 
     @Override
+    @Deprecated
     public Parent buildUserInfoInput(User user) {
         return new UserInfoInputView(user);
+    }
+
+    @Override
+    public Parent buildInput(User user) {
+        ensureMainControllers();
+        ToastBar toast = new ToastBar();
+        InputView input = new InputView(user, recordController, chartController, toast);
+        StackPane root = new StackPane(input, toast);
+        return root;
+    }
+
+    @Override
+    public Parent buildAiAnalysis(User user) {
+        ensureMainControllers();
+        return new AiAnalysisView(user, aiController, chartController, new ToastBar());
+    }
+
+    @Override
+    public Parent buildPhoto(User user) {
+        ensureMainControllers();
+        return new PhotoView(user, photoController, recordController, new ToastBar());
+    }
+
+    @Override
+    public Parent buildReport(User user) {
+        ensureMainControllers();
+        return new ReportView(user.getId(), reportController, recordController, new ToastBar());
+    }
+
+    @Override
+    public Parent buildChart(User user) {
+        ensureMainControllers();
+        return new ChartView(user.getId(), chartController);
+    }
+
+    @Override
+    public Parent buildSettings(User user) {
+        ensureMainControllers();
+        return new SettingsView(user.getId(), settingController, new ToastBar(),
+                () -> PageNavigator.toPhoto(user));
     }
 
     @Override

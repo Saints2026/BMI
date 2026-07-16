@@ -34,20 +34,14 @@ import java.util.List;
 /**
  * Health Info Input Page — 图2 完善个人健康信息（像素级复刻效果图）
  *
- * <p>Layout:
- * <ul>
- *   <li>Top bar: left title "完善个人健康信息" + checkmark icon,
- *       right floating BMI card (real-time)</li>
- *   <li>Center-left: white form card with FLAT grid layout
- *       (gender, age, height, weight, waist, hip, bodyfat,
- *       systolic*, diastolic*, smoking, drinking, exercise)</li>
- *   <li>Bottom: blue "保存健康信息" button</li>
- *   <li>Background: static illustration area</li>
- * </ul>
+ * <p>⚠️ 已废弃（V17 起合并入标准 {@code InputView}）：登录成功后统一跳转
+ * {@code InputView}（四大折叠面板），本页不再被任何路由引用。为遵守「不删除有效代码」
+ * 约定保留文件，仅标记 @Deprecated 以表明冗余状态。
  *
- * <p>Preserves all business logic: BP range validation,
- * real-time BMI calculation with grade colors, UserSession storage.
+ * <p>原承载的吸烟 / 饮酒 / 运动等生活习惯字段已迁移至 {@code InputView} 的「拓展健康指标」
+ * 折叠面板；BMI 实时浮动卡片改为复用全局工具类 {@code BmiFloatingCard}。
  */
+@Deprecated(since = "V17", forRemoval = false)
 public class UserInfoInputView extends BorderPane implements LangChangeListener {
 
     private final User user;
@@ -335,12 +329,18 @@ public class UserInfoInputView extends BorderPane implements LangChangeListener 
     }
 
     private void doSubmit() {
-        refreshBasicErrors();
-        String ek = basicErrorKey();
-        if (ek != null) { ToastBar.showError(I18nUtil.t(ek)); return; }
-        storeToSession();
-        AppConfig.getInstance().removeListener(this);
-        PageNavigator.toMain(user);
+        try {
+            refreshBasicErrors();
+            String ek = basicErrorKey();
+            if (ek != null) { ToastBar.showError(I18nUtil.t(ek)); return; }
+            storeToSession();
+            AppConfig.getInstance().removeListener(this);
+            PageNavigator.toMain(user);
+        } catch (Exception ex) {
+            // 全局异常捕获：提示用户但不中断（异常时仅弹错，正常路径照常跳转首页）
+            System.err.println("[BMI][ERROR] UserInfoInputView.doSubmit failed: " + ex.getMessage());
+            ToastBar.showError(I18nUtil.t("input.saveError"));
+        }
     }
 
     private boolean basicValid() { return basicErrorKey() == null; }

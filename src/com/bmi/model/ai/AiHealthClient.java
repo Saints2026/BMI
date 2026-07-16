@@ -15,7 +15,7 @@ import java.net.URI;
 import java.net.URL;
 import java.net.UnknownHostException;
 import java.nio.charset.StandardCharsets;
-import java.text.SimpleDateFormat;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Properties;
@@ -37,7 +37,7 @@ public class AiHealthClient {
     static final int READ_TIMEOUT_MS = 10000;
     static final int MAX_RETRY = 1;
 
-    private static final SimpleDateFormat ISO = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss");
+    private static final DateTimeFormatter ISO = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss");
     private static final String SYSTEM_PROMPT =
             "你是一位严谨的中文健康顾问，请按『饮食/运动/健康』三段给出建议。";
 
@@ -310,8 +310,8 @@ public class AiHealthClient {
         return "肥胖";
     }
 
-    private String format(java.sql.Timestamp ts) {
-        return ts == null ? "" : ISO.format(ts);
+    private String format(java.time.LocalDateTime ldt) {
+        return ldt == null ? "" : ISO.format(ldt);
     }
 
     private String readStream(InputStream is) throws IOException {

@@ -40,6 +40,8 @@ public class JdbcUtil {
     private static String USER;
     private static String PASSWORD;
     private static boolean isSqlite;
+    /** 配置是否就绪（db-config.properties 存在且含 db.url）。缺失时置 false 而非抛致命异常。 */
+    private static boolean configured = false;
 
     static {
         String configFile = "db-config.properties";
@@ -50,14 +52,33 @@ public class JdbcUtil {
             USER = props.getProperty("db.user");
             PASSWORD = props.getProperty("db.password");
             String driver = props.getProperty("db.driver");
-            Class.forName(driver);
+            if (driver != null && !driver.trim().isEmpty()) {
+                Class.forName(driver);
+            }
             isSqlite = (URL != null && URL.startsWith("jdbc:sqlite"));
+            configured = (URL != null && !URL.trim().isEmpty());
+            if (!configured) {
+                System.err.println("[BMI][WARN] JdbcUtil: " + configFile
+                        + " 缺少 db.url，按未配置处理（不抛致命异常）");
+            }
         } catch (FileNotFoundException e) {
-            throw new ExceptionInInitializerError("Configuration file not found: " + configFile
-                    + " (current working directory: " + System.getProperty("user.dir") + ")");
+            configured = false;
+            System.err.println("[BMI][WARN] JdbcUtil: 配置文件未找到 " + configFile
+                    + " (cwd=" + System.getProperty("user.dir") + ")，按未配置处理（不抛致命异常）");
         } catch (IOException | ClassNotFoundException e) {
-            throw new ExceptionInInitializerError("Failed to load " + configFile + ": " + e.getMessage());
+            configured = false;
+            System.err.println("[BMI][WARN] JdbcUtil: 加载 " + configFile + " 失败: " + e.getMessage()
+                    + "，按未配置处理（不抛致命异常）");
         }
+    }
+
+    /**
+     * 数据库配置是否就绪：配置文件存在且含非空 db.url。
+     * <p>缺失时返回 {@code false}（而非在类初始化阶段抛 {@link ExceptionInInitializerError}），
+     * 调用方据此降级处理，避免 {@code NoClassDefFoundError} 致页面崩溃、跳转卡死。</p>
+     */
+    public static boolean isConfigured() {
+        return configured;
     }
 
     /**
@@ -69,6 +90,10 @@ public class JdbcUtil {
      * @throws SQLException 连接失败时抛出
      */
     public static Connection getConnection() throws SQLException {
+        if (!configured) {
+            // 配置缺失：抛可恢复的 SQLException（由上层 try-catch 降级为提示），而非致命类初始化错误
+            throw new SQLException("Database not configured: db-config.properties missing or db.url empty");
+        }
         // 应用连接超时（单位：秒）
         DriverManager.setLoginTimeout(CONNECT_TIMEOUT_MS / 1000);
         Connection conn = DriverManager.getConnection(URL, USER, PASSWORD);

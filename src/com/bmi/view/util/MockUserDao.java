@@ -4,7 +4,7 @@ import com.bmi.model.User;
 import com.bmi.model.db.UserDao;
 
 import java.security.MessageDigest;
-import java.sql.Timestamp;
+import java.time.LocalDateTime;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
@@ -39,7 +39,7 @@ public class MockUserDao implements UserDao {
         u.setUsername(SEED_USERNAME);
         u.setSalt(salt);
         u.setPasswordHash(sha256hex(salt + SEED_PASSWORD));
-        u.setCreatedAt(new Timestamp(System.currentTimeMillis()));
+        u.setCreatedAt(LocalDateTime.now());
         u.setStatus(1);
         u.setId(idSeq.getAndIncrement());
         byUsername.put(SEED_USERNAME, u);
@@ -56,11 +56,20 @@ public class MockUserDao implements UserDao {
     }
 
     @Override
-    public void insert(User user) {
+    public User login(String username, String password) {
+        User u = byUsername.get(username);
+        if (u == null) return null;
+        String expect = sha256hex(u.getSalt() + password);
+        return expect.equals(u.getPasswordHash()) ? u : null;
+    }
+
+    @Override
+    public boolean insert(User user) {
         if (user.getId() == 0) {
             user.setId(idSeq.getAndIncrement());
         }
         byUsername.put(user.getUsername(), user);
+        return true;
     }
 
     @Override

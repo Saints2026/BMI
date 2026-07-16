@@ -2,7 +2,8 @@ package com.bmi.model.ai;
 
 import com.bmi.model.BodyRecord;
 
-import java.sql.Timestamp;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -61,7 +62,7 @@ public class TestAiService {
         r.setHeight(height);
         r.setAge(age);
         r.setGender(gender);
-        r.setMeasureTime(Timestamp.valueOf(measureTime));
+        r.setMeasureTime(LocalDateTime.parse(measureTime, DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")));
         return r;
     }
 }

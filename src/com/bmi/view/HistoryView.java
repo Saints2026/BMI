@@ -2,17 +2,22 @@ package com.bmi.view;
 
 import com.bmi.controller.RecordController;
 import com.bmi.i18n.AppConfig;
+import com.bmi.view.util.BmiFloatingCard;
 import com.bmi.view.util.I18nUtil;
 import com.bmi.i18n.LangChangeListener;
 import com.bmi.model.BodyRecord;
 import com.bmi.view.util.StyleFactory;
 import com.bmi.view.util.ThemeConstant;
 import com.bmi.view.util.ToastBar;
+import javafx.embed.swing.SwingFXUtils;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
+import javafx.scene.SnapshotParameters;
 import javafx.scene.chart.LineChart;
 import javafx.scene.chart.NumberAxis;
 import javafx.scene.chart.XYChart;
+import javafx.scene.image.WritableImage;
+import javafx.stage.FileChooser;
 import javafx.scene.control.Alert;
 import javafx.scene.control.Button;
 import javafx.scene.control.ButtonType;
@@ -24,12 +29,14 @@ import javafx.scene.control.Label;
 import javafx.scene.control.TableCell;
 import javafx.scene.control.TableColumn;
 import javafx.scene.control.TableView;
+import javafx.scene.control.TextField;
 import javafx.scene.control.cell.PropertyValueFactory;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.VBox;
 
+import java.io.File;
 import java.sql.Timestamp;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -42,6 +49,8 @@ import java.util.Optional;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
+import javax.imageio.ImageIO;
+
 public class HistoryView extends BorderPane implements LangChangeListener {
 
     private final long userId;
@@ -51,6 +60,10 @@ public class HistoryView extends BorderPane implements LangChangeListener {
 
     private final DatePicker dpStart = StyleFactory.datePicker();
     private final DatePicker dpEnd = StyleFactory.datePicker();
+    private final TextField bmiMin = StyleFactory.numberField("history.filter.bmiMin");
+    private final TextField bmiMax = StyleFactory.numberField("history.filter.bmiMax");
+    private final Label bmiFilterLabel = new Label();
+    private final BmiFloatingCard bmiCard = BmiFloatingCard.create();
     private final Button btnQuery = StyleFactory.primaryButton("history.filter.query");
     private final Button btnReset = StyleFactory.secondaryButton("history.filter.reset");
 
@@ -109,15 +122,17 @@ public class HistoryView extends BorderPane implements LangChangeListener {
         HBox rightGroup = new HBox(8,
                 new Label(I18nUtil.t("history.filter.start")), dpStart,
                 new Label(I18nUtil.t("history.filter.end")), dpEnd,
+                bmiFilterLabel, bmiMin, bmiMax,
                 metricCombo, btnQuery, btnReset);
         rightGroup.setAlignment(Pos.CENTER_LEFT);
         rightGroup.setPadding(new Insets(8, 16, 8, 8));
 
-        HBox fullBar = new HBox(leftGroup, rightGroup);
+        HBox fullBar = new HBox(10, leftGroup, rightGroup, bmiCard.node());
         fullBar.setStyle("-fx-background-color:-bmi-panel-solid; -fx-border-color:-bmi-border;"
-                + "-fx-border-width:0 0 1 0; -fx-padding:6 0;");
+                + "-fx-border-width:0 0 1 0; -fx-padding:6 0; -fx-alignment:CENTER_LEFT;");
         HBox.setHgrow(leftGroup, Priority.NEVER);
         HBox.setHgrow(rightGroup, Priority.ALWAYS);
+        HBox.setHgrow(bmiCard.node(), Priority.NEVER);
 
         setTop(fullBar);
     }
@@ -255,8 +270,7 @@ public class HistoryView extends BorderPane implements LangChangeListener {
         chartCard.setPadding(new Insets(12));
         chartCard.setStyle("-fx-background-color:-bmi-panel-solid; -fx-border-color:-bmi-border;"
                 + "-fx-border-width:1; -fx-background-radius:10; -fx-border-radius:10;");
-        btnExportChart.setOnAction(e -> ToastBar.showSuccess(I18nUtil.t("chart.export") + " "
-                + I18nUtil.t("page.todo")));
+        btnExportChart.setOnAction(e -> exportChart());
         btnExportChart.setMaxWidth(160);
         VBox.setVgrow(trendChart, Priority.ALWAYS);
 
@@ -283,19 +297,63 @@ public class HistoryView extends BorderPane implements LangChangeListener {
         return recordController.queryRecords(userId, toTs(dpStart.getValue(), true), toTs(dpEnd.getValue(), false));
     }
 
-    private void deleteViaController(long id) { recordController.deleteRecord(id); }
+    private void deleteViaController(long id, long userId) { recordController.deleteRecord(id, userId); }
 
     private void loadData() {
         List<BodyRecord> list = fetchRecords();
+        // BMI 范围筛选（内存过滤）
+        Double min = num(bmiMin), max = num(bmiMax);
+        if (min != null || max != null) {
+            final Double lo = min, hi = max;
+            list = list.stream().filter(r -> {
+                boolean ok = true;
+                if (lo != null) ok = ok && r.getBmi() >= lo;
+                if (hi != null) ok = ok && r.getBmi() <= hi;
+                return ok;
+            }).collect(Collectors.toList());
+        }
         table.setItems(javafx.collections.FXCollections.observableArrayList(list));
         refreshSelectionCount();
         refreshTrendChart(list);
+        if (list.isEmpty()) bmiCard.clear();
+        else bmiCard.update(list.get(list.size() - 1).getBmi());
         refreshTexts();
+    }
+
+    private Double num(TextField tf) {
+        String s = tf.getText().trim();
+        if (s.isEmpty()) return null;
+        try { return Double.parseDouble(s); }
+        catch (NumberFormatException e) { return null; }
     }
 
     private void refreshSelectionCount() {
         long cnt = selection.values().stream().filter(Boolean::booleanValue).count();
         selectCountLabel.setText(I18nUtil.t("history.selectedCount", String.valueOf(cnt)));
+    }
+
+    /** 导出趋势图为 PNG（Snapshot → SwingFXUtils）。 */
+    private void exportChart() {
+        if (trendChart.getData().isEmpty()) {
+            ToastBar.showWarning(I18nUtil.t("chart.exportEmpty"));
+            return;
+        }
+        WritableImage img = trendChart.snapshot(new SnapshotParameters(), null);
+        FileChooser fc = new FileChooser();
+        fc.setTitle(I18nUtil.t("chart.export"));
+        fc.getExtensionFilters().addAll(new FileChooser.ExtensionFilter("PNG (*.png)", "*.png"));
+        File dir = new File(System.getProperty("user.home"), "bmi/charts");
+        dir.mkdirs();
+        fc.setInitialDirectory(dir);
+        fc.setInitialFileName("bmi-history-" + userId + "-" + System.currentTimeMillis() / 1000 + ".png");
+        File file = fc.showSaveDialog(getScene() != null ? getScene().getWindow() : null);
+        if (file == null) return;
+        try {
+            ImageIO.write(SwingFXUtils.fromFXImage(img, null), "png", file);
+            ToastBar.showSuccess(I18nUtil.t("chart.exportOk", file.getAbsolutePath()));
+        } catch (Exception ex) {
+            ToastBar.showError(I18nUtil.t("chart.exportFail", ex.getMessage()));
+        }
     }
 
     private Timestamp toTs(LocalDate d, boolean start) {
@@ -306,7 +364,7 @@ public class HistoryView extends BorderPane implements LangChangeListener {
 
     private void confirmAndDeleteOne(BodyRecord r) {
         if (showConfirm(I18nUtil.t("history.deleteConfirmOne"))) {
-            deleteViaController(r.getId()); selection.remove(r.getId());
+            deleteViaController(r.getId(), r.getUserId()); selection.remove(r.getId());
             loadData(); toast.success(I18nUtil.t("history.batchDeleted", "1"));
         }
     }
@@ -315,7 +373,7 @@ public class HistoryView extends BorderPane implements LangChangeListener {
         List<Long> ids = selectedIds();
         if (ids.isEmpty()) { toast.warning(I18nUtil.t("history.noneSelected")); return; }
         if (showConfirm(I18nUtil.t("history.deleteConfirm", ids.size()))) {
-            for (Long id : ids) deleteViaController(id);
+            for (Long id : ids) deleteViaController(id, userId);
             selection.keySet().removeAll(ids); loadData();
             toast.success(I18nUtil.t("history.batchDeleted", String.valueOf(ids.size())));
         }
@@ -360,6 +418,9 @@ public class HistoryView extends BorderPane implements LangChangeListener {
         btnTrendChart.setText(I18nUtil.t("history.generateTrend"));
         btnExportChart.setText(I18nUtil.t("chart.export"));
         chartTitle.setText(I18nUtil.t("chart.trend"));
+        bmiMin.setPromptText(I18nUtil.t("history.filter.bmiMin"));
+        bmiMax.setPromptText(I18nUtil.t("history.filter.bmiMax"));
+        bmiFilterLabel.setText(I18nUtil.t("history.filter.bmi"));
         refreshSelectionCount();
     }
 

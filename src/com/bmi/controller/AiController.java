@@ -59,6 +59,10 @@ public class AiController {
 
     /** 内部取数：近 10 条历史（时间升序），避免请求体过大（P1-F4）。 */
     private List<BodyRecord> fetchHistory(long userId) {
-        return recordDao.queryLatestN(userId, 10);
+        List<BodyRecord> history = recordDao.listAllRecords(userId);
+        // 取最新 10 条并转为时间升序（供模型趋势上下文，对齐 P1-F4）
+        if (history.size() > 10) history = new java.util.ArrayList<>(history.subList(0, 10));
+        history.sort(java.util.Comparator.comparing(BodyRecord::getMeasureTime));
+        return history;
     }
 }

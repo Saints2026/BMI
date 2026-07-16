@@ -3,15 +3,18 @@ package com.bmi.view;
 import com.bmi.controller.ChartController;
 import com.bmi.controller.RecordController;
 import com.bmi.i18n.AppConfig;
-import com.bmi.view.util.I18nUtil;
-import com.bmi.i18n.LangChangeListener;
-import com.bmi.i18n.Lang;
 import com.bmi.model.BodyRecord;
+import com.bmi.model.User;
+import com.bmi.i18n.LangChangeListener;
+import com.bmi.view.util.I18nUtil;
+import com.bmi.view.util.PageNavigator;
+import com.bmi.view.util.BmiFloatingCard;
 import com.bmi.view.util.Responsive;
 import com.bmi.view.util.StyleFactory;
 import com.bmi.view.util.ThemeConstant;
 import com.bmi.view.util.ToastBar;
 import javafx.geometry.Insets;
+import javafx.geometry.Pos;
 import javafx.scene.control.Button;
 import javafx.scene.control.ComboBox;
 import javafx.scene.control.DatePicker;
@@ -23,6 +26,7 @@ import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.GridPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
+import javafx.scene.layout.Region;
 import javafx.scene.layout.VBox;
 
 import java.time.LocalDate;
@@ -32,22 +36,32 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
+import javafx.scene.control.Alert;
+import java.io.PrintWriter;
+import java.io.StringWriter;
 
 /**
- * 体检数据录入页面（对齐 ui_design.md 第三章「InputView」+ 用户需求「自适应布局 / 标准化控件」）。
+ * 体检数据录入页面（V17 标准单页：合并原 UserInfoInputView 与 InputView）。
  *
- * 外层 BorderPane；中心 ScrollPane 内含 4 个 TitledPane 可折叠录入面板，
- * 每个面板内部为响应式 GridPane（窗口 &gt;1200 三列 / 800-1200 两列 / &lt;800 单列）。
- * 实时 BMI（FR-03）/ 体脂率（FR-04）计算；保存多条独立历史记录；
- * 支持加载并修改历史旧记录（loadRecord）；保存 / 修改经 ToastBar 反馈并联动刷新首页。
+ * <p>外层 BorderPane；顶部标题 + 实时 BMI 浮动卡片 + 操作按钮；中心 ScrollPane 内含 4 个
+ * TitledPane 折叠录入面板（基础必填 / 身体围度 / 拓展健康 / 既往疾病），每个面板内部为响应式
+ * GridPane（窗口 &gt;1200 三列 / 800-1200 两列 / &lt;800 单列）。
+ *
+ * <p>校验标记统一：必填项标签后红色「*」，选填项标签后灰色「选填」（height/weight/age/gender/waist
+ * 为必填，其余为选填）。实时 BMI（FR-03）/ 体脂率（FR-04）计算；保存多条独立历史记录；
+ * 支持加载并修改历史旧记录（loadRecord）。吸烟 / 饮酒 / 运动频率迁移自原录入页。
  */
 public class InputView extends BorderPane implements LangChangeListener {
 
     private final long userId;
+    private final User user;
     private final RecordController recordController;
     private final ChartController chartController;
-    private final Runnable onDataChanged;
     private final ToastBar toast;
+
+    // 提交防抖（互斥锁，非定时 debounce）：避免短时间内重复点击造成重复提交 / 重复跳转。
+    // 锁的释放统一在 doSave/doModify 的 finally 块中完成（含校验失败与异常分支），绝不会卡死拦截跳转。
+    private volatile boolean submitting = false;
 
     private final TextField tfHeight = StyleFactory.numberField("input.height");
     private final TextField tfWeight = StyleFactory.numberField("input.weight");
@@ -67,8 +81,19 @@ public class InputView extends BorderPane implements LangChangeListener {
     private final TextField tfHr = StyleFactory.numberField("input.heart");
     private final TextField tfVisc = StyleFactory.numberField("input.visceral");
 
+    // 拓展健康：生活习惯（UI 字段，无独立后端列，仅前端收集）
+    private final ComboBox<String> cbSmoking = StyleFactory.comboBox();
+    private final ComboBox<String> cbDrinking = StyleFactory.comboBox();
+    private final ComboBox<String> cbExercise = StyleFactory.comboBox();
+
     private final List<javafx.scene.control.CheckBox> diseaseBoxes = new ArrayList<>();
     private final javafx.scene.control.CheckBox cbNone = StyleFactory.checkBox("input.disease.none");
+
+    // 顶部实时 BMI 浮动卡片（复用全局工具类 BmiFloatingCard）
+    private final BmiFloatingCard bmiCard = BmiFloatingCard.create();
+
+    // 选填「选填」小标签集合（语言切换时刷新）
+    private final List<Label> optionalLabels = new ArrayList<>();
 
     private final Label lblResult = new Label();
     private final Label status = new Label();
@@ -80,12 +105,12 @@ public class InputView extends BorderPane implements LangChangeListener {
     private BodyRecord selectedRecord = null;
     private static final DateTimeFormatter FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
-    public InputView(long userId, RecordController recordController, ChartController chartController,
-                     Runnable onDataChanged, ToastBar toast) {
-        this.userId = userId;
+    public InputView(User user, RecordController recordController, ChartController chartController,
+                     ToastBar toast) {
+        this.user = user;
+        this.userId = user.getId();
         this.recordController = recordController;
         this.chartController = chartController;
-        this.onDataChanged = onDataChanged;
         this.toast = toast;
         buildTop();
         buildCenter();
@@ -93,12 +118,18 @@ public class InputView extends BorderPane implements LangChangeListener {
         AppConfig.getInstance().addListener(this);
     }
 
-    // ---------------- 顶部：标题 + 结果 + 操作 ----------------
+    // ---------------- 顶部：标题 + BMI 浮动卡片 + 操作 ----------------
     private void buildTop() {
         Label title = StyleFactory.title("input.title");
         HBox ops = new HBox(10, btnSave, btnLoad, btnModify);
-        VBox top = new VBox(8, title, lblResult, ops, status);
+        VBox left = new VBox(8, title, lblResult, ops, status);
+
+        VBox card = bmiCard.node();
+        HBox top = new HBox(16, left, card);
         top.setPadding(new Insets(12));
+        top.setAlignment(Pos.CENTER_LEFT);
+        HBox.setHgrow(card, Priority.ALWAYS);
+        card.setAlignment(Pos.CENTER_RIGHT);
         setTop(top);
 
         btnSave.setOnAction(e -> doSave());
@@ -106,31 +137,47 @@ public class InputView extends BorderPane implements LangChangeListener {
         btnModify.setOnAction(e -> doModify());
     }
 
+    // BMI 浮动卡片由全局 BmiFloatingCard（字段 bmiCard）提供，不在此处重复构建。
+
     // ---------------- 中心：折叠面板 + 响应式栅格 ----------------
     private void buildCenter() {
         cbGender.getItems().addAll(I18nUtil.t("input.male"), I18nUtil.t("input.female"));
         cbGender.setValue(I18nUtil.t("input.male"));
         dpTime.setValue(LocalDate.now());
+
+        String[] habitOptions = {I18nUtil.t("input.habit.never"), I18nUtil.t("input.habit.sometimes"),
+                I18nUtil.t("input.habit.often"), I18nUtil.t("input.habit.daily")};
+        for (ComboBox<String> cb : new ComboBox[]{cbSmoking, cbDrinking, cbExercise}) {
+            cb.getItems().addAll(habitOptions);
+            cb.setValue(cb.getItems().get(0));
+        }
+
         for (Label l : new Label[]{errHeight, errWeight, errAge}) {
             l.setStyle("-fx-text-fill:#f44336; -fx-font-size:11px;");
         }
 
         TitledPane tpBasic = StyleFactory.titledPane("input.basic",
-                responsiveGrid(row("input.height", tfHeight, errHeight),
-                        row("input.weight", tfWeight, errWeight),
-                        row("input.age", tfAge, errAge),
-                        row("input.gender", cbGender, null),
-                        row("input.time", dpTime, null)));
+                responsiveGrid(
+                        row("input.height", tfHeight, errHeight, true),
+                        row("input.weight", tfWeight, errWeight, true),
+                        row("input.age", tfAge, errAge, true),
+                        row("input.gender", cbGender, null, true),
+                        row("input.time", dpTime, null, false)));
         TitledPane tpCircum = StyleFactory.titledPane("input.circum",
-                responsiveGrid(row("input.waist", tfWaist, null),
-                        row("input.hip", tfHip, null),
-                        row("input.wrist", tfWrist, null),
-                        row("input.neck", tfNeck, null)));
-        TitledPane tpVital = StyleFactory.titledPane("input.vital",
-                responsiveGrid(row("input.systolic", tfSys, null),
-                        row("input.diastolic", tfDia, null),
-                        row("input.heart", tfHr, null),
-                        row("input.visceral", tfVisc, null)));
+                responsiveGrid(
+                        row("input.waist", tfWaist, null, true),
+                        row("input.hip", tfHip, null, false),
+                        row("input.wrist", tfWrist, null, false),
+                        row("input.neck", tfNeck, null, false)));
+        TitledPane tpExtra = StyleFactory.titledPane("input.extra",
+                responsiveGrid(
+                        row("input.systolic", tfSys, null, false),
+                        row("input.diastolic", tfDia, null, false),
+                        row("input.heart", tfHr, null, false),
+                        row("input.visceral", tfVisc, null, false),
+                        row("input.smoking", cbSmoking, null, false),
+                        row("input.drinking", cbDrinking, null, false),
+                        row("input.exercise", cbExercise, null, false)));
 
         // 疾病勾选（选填，互斥「无」）
         for (String key : new String[]{"input.disease.hypertension", "input.disease.diabetes",
@@ -144,7 +191,7 @@ public class InputView extends BorderPane implements LangChangeListener {
         diseaseBox.getChildren().add(cbNone);
         TitledPane tpDisease = StyleFactory.titledPane("input.disease", diseaseBox);
 
-        javafx.scene.control.Accordion acc = new javafx.scene.control.Accordion(tpBasic, tpCircum, tpVital, tpDisease);
+        javafx.scene.control.Accordion acc = new javafx.scene.control.Accordion(tpBasic, tpCircum, tpExtra, tpDisease);
         acc.setExpandedPane(tpBasic);
         StyleFactory.styleAccordion(acc);
 
@@ -154,11 +201,27 @@ public class InputView extends BorderPane implements LangChangeListener {
         setCenter(scroll);
     }
 
-    /** 标准化录入行：标签 + 控件 + 错误提示（选填项 err 为 null）。 */
-    private VBox row(String key, javafx.scene.Node node, Label err) {
-        VBox b = new VBox(2, new Label(I18nUtil.t(key)), node);
+    /** 标准化录入行：必填项标签后红色「*」，选填项标签后灰色「选填」。 */
+    private VBox row(String key, javafx.scene.Node node, Label err, boolean required) {
+        Label label = new Label(I18nUtil.t(key));
+        HBox labelBox = new HBox(4, label);
+        if (required) {
+            Label star = new Label("*");
+            star.setStyle("-fx-text-fill:#f76b6c; -fx-font-weight:bold; -fx-font-size:13px;");
+            labelBox.getChildren().add(star);
+        } else {
+            Label opt = new Label(I18nUtil.t("input.optional"));
+            opt.setStyle("-fx-font-size:10px; -fx-text-fill:#999999;");
+            optionalLabels.add(opt);
+            labelBox.getChildren().add(opt);
+        }
+        VBox b = new VBox(2, labelBox, node);
         if (err != null) {
             b.getChildren().add(err);
+        }
+        // 响应式：控件随栅格列宽拉伸填满（补齐自适应布局）
+        if (node instanceof Region) {
+            ((Region) node).setMaxWidth(Double.MAX_VALUE);
         }
         return b;
     }
@@ -196,10 +259,13 @@ public class InputView extends BorderPane implements LangChangeListener {
         Double h = num(tfHeight), w = num(tfWeight);
         if (h == null || h <= 0 || w == null || w <= 0) {
             lblResult.setText("");
+            bmiCard.clear();
             return;
         }
         double bmi = Math.round((w / ((h / 100) * (h / 100))) * 10.0) / 10.0;
-        StringBuilder sb = new StringBuilder(I18nUtil.t("input.result.bmi", bmi, gradeName(bmi)));
+        String grade = gradeName(bmi);
+        String color = ThemeConstant.bmiGradeColor(bmi);
+        StringBuilder sb = new StringBuilder(I18nUtil.t("input.result.bmi", bmi, grade));
         Double age = num(tfAge);
         int gender = I18nUtil.t("input.male").equals(cbGender.getValue()) ? 1 : 0;
         if (age != null && age >= 1 && age <= 120) {
@@ -207,7 +273,9 @@ public class InputView extends BorderPane implements LangChangeListener {
             sb.append("   ").append(I18nUtil.t("input.result.bodyfat", bf));
         }
         lblResult.setText(sb.toString());
-        lblResult.setStyle("-fx-text-fill:" + ThemeConstant.bmiGradeColor(bmi) + "; -fx-font-weight:bold;");
+        lblResult.setStyle("-fx-text-fill:" + color + "; -fx-font-weight:bold;");
+
+        bmiCard.update(bmi);
     }
 
     // ---------------- 历史加载 / 编辑 ----------------
@@ -217,7 +285,6 @@ public class InputView extends BorderPane implements LangChangeListener {
             toast.warning(I18nUtil.t("common.emptyHint"));
             return;
         }
-        // 简单起见，弹出一个选择对话框
         javafx.scene.control.ChoiceDialog<BodyRecord> dlg =
                 new javafx.scene.control.ChoiceDialog<>(list.get(0), list);
         dlg.setTitle(I18nUtil.t("input.loadHistory"));
@@ -234,7 +301,7 @@ public class InputView extends BorderPane implements LangChangeListener {
         tfAge.setText(String.valueOf(r.getAge()));
         cbGender.setValue(r.getGender() == 1 ? I18nUtil.t("input.male") : I18nUtil.t("input.female"));
         if (r.getMeasureTime() != null) {
-            dpTime.setValue(r.getMeasureTime().toLocalDateTime().toLocalDate());
+            dpTime.setValue(r.getMeasureTime().toLocalDate());
         }
         tfWaist.setText(fmt(r.getWaistCircum()));
         tfHip.setText(fmt(r.getHipCircum()));
@@ -269,55 +336,138 @@ public class InputView extends BorderPane implements LangChangeListener {
     }
 
     // ---------------- 保存 / 修改 ----------------
-    private void doSave() {
-        Double h = num(tfHeight), w = num(tfWeight), age = num(tfAge);
-        String hErr = validate(h, 50, 250, "validate.height");
-        String wErr = validate(w, 10, 300, "validate.weight");
-        String aErr = validate(age, 1, 120, "validate.age");
-        clearErr(errHeight, tfHeight);
-        clearErr(errWeight, tfWeight);
-        clearErr(errAge, tfAge);
-        if (hErr != null) { markErr(errHeight, tfHeight, hErr); return; }
-        if (wErr != null) { markErr(errWeight, tfWeight, wErr); return; }
-        if (aErr != null) { markErr(errAge, tfAge, aErr); return; }
 
-        int gender = I18nUtil.t("input.male").equals(cbGender.getValue()) ? 1 : 0;
-        BodyRecord r = recordController.createRecord(userId, h, w, age.intValue(), gender, measureTimeStr());
-        if (r == null) {
-            toast.error(I18nUtil.t("input.savedEmpty"));
+    /**
+     * 保存本条记录并跳转首页：内置日志埋点 + 双层兜底跳转 + 空指针防护 + 提交锁加固。
+     *
+     * <p>跳转保证：无论「校验失败 / 数据库报错 / 代码异常 / 成功」哪条路径，方法结束前都会
+     * 强制回到 Main 首页——成功路径由 try 内 {@link PageNavigator#toMain} 第一层兜底完成；
+     * 其余路径（含提前 return 与 catch）由 finally 内 {@link PageNavigator#forceHome} 第二层兜底完成，
+     * finally 末尾无任何 return 阻断兜底逻辑。
+     */
+    private void doSave() {
+        // 防抖：短时间内重复点击只处理一次（锁在 finally 释放，支持重复点击提交）
+        if (submitting) {
+            logStep("忽略重复点击（提交锁生效）");
             return;
         }
-        applyExtensions(r);
-        recordController.updateRecord(r);
-        toast.success(I18nUtil.t("input.savedOk", 1));
-        onDataChanged.run();
+        submitting = true;
+        btnSave.setDisable(true);
+        boolean navigated = false; // 第一层兜底是否已完成跳转
+        try {
+            logStep("开始保存 -> 表单校验");
+            Double h = num(tfHeight), w = num(tfWeight), age = num(tfAge);
+            String hErr = validate(h, 50, 250, "validate.height");
+            String wErr = validate(w, 10, 300, "validate.weight");
+            String aErr = validate(age, 1, 120, "validate.age");
+            clearErr(errHeight, tfHeight);
+            clearErr(errWeight, tfWeight);
+            clearErr(errAge, tfAge);
+            // 以下提前 return 均会落入 finally 的 forceHome 第二层兜底，不会跳过跳转
+            if (hErr != null) { markErr(errHeight, tfHeight, hErr); logStep("校验未通过(身高) -> 兜底跳转首页"); return; }
+            if (wErr != null) { markErr(errWeight, tfWeight, wErr); logStep("校验未通过(体重) -> 兜底跳转首页"); return; }
+            if (aErr != null) { markErr(errAge, tfAge, aErr); logStep("校验未通过(年龄) -> 兜底跳转首页"); return; }
+
+            logStep("表单校验通过");
+            int gender = I18nUtil.t("input.male").equals(cbGender.getValue()) ? 1 : 0;
+            BodyRecord r = recordController.createRecord(userId, h, w, age.intValue(), gender, measureTimeStr());
+            if (r == null) {
+                toast.error(I18nUtil.t("input.savedEmpty"));
+                logStep("记录创建返回 null -> 兜底跳转首页");
+                return;
+            }
+            logStep("记录创建完成(id=" + r.getId() + ")");
+            applyExtensions(r);
+            recordController.updateRecord(r);
+            logStep("持久化入库完成");
+            toast.success(I18nUtil.t("input.savedOk", 1));
+
+            // 第一层兜底：标准跳转首页
+            logStep("即将执行 toMain 跳转首页（第一层兜底）");
+            PageNavigator.toMain(user);
+            navigated = true;
+            logStep("toMain 执行完毕（已跳转）");
+        } catch (Exception ex) {
+            // 全局异常捕获：弹出完整堆栈信息弹窗，确保无静默中断
+            logStep("捕获异常 -> 弹窗堆栈并兜底跳转");
+            showException(ex);
+        } finally {
+            // 提交锁加固：所有分支（含校验失败 / 异常）统一在此释放，绝不会卡死拦截跳转
+            submitting = false;
+            btnSave.setDisable(false);
+            logStep("提交锁已释放");
+            // 第二层兜底：若第一层未完成跳转，强制切回首页（末尾无 return 阻断）
+            if (!navigated) {
+                logStep("执行 forceHome 第二层兜底跳转首页");
+                PageNavigator.forceHome(user);
+            }
+            logStep("doSave 流程结束");
+        }
+    }
+
+    /** 流程节点日志：控制台输出 + 轻量 Toast 弹窗，区分代码阻塞位置。 */
+    private void logStep(String msg) {
+        String line = "[BMI][doSave] " + msg;
+        System.out.println(line);
+        ToastBar.showToast(ToastBar.Type.WARNING, line);
+    }
+
+    /** 异常弹窗：完整堆栈输出到控制台，并在 GUI 环境弹出堆栈 Alert（无头环境自动跳过，不崩溃）。 */
+    private void showException(Exception ex) {
+        StringWriter sw = new StringWriter();
+        ex.printStackTrace(new PrintWriter(sw));
+        String stack = sw.toString();
+        System.err.println("[BMI][ERROR] InputView.doSave 异常:\n" + stack);
+        ToastBar.showError(I18nUtil.t("input.saveError"));
+        if (javafx.application.Platform.isFxApplicationThread()) {
+            try {
+                Alert alert = new Alert(Alert.AlertType.ERROR, stack, javafx.scene.control.ButtonType.OK);
+                alert.setTitle(I18nUtil.t("input.saveError"));
+                alert.setHeaderText(I18nUtil.t("input.saveError"));
+                alert.showAndWait();
+            } catch (Exception ignore) {
+                // 弹窗失败不影响主流程兜底跳转
+            }
+        }
     }
 
     private void doModify() {
-        if (selectedRecord == null) {
-            toast.warning(I18nUtil.t("input.noneSelected"));
+        if (submitting) {
             return;
         }
-        Double h = num(tfHeight), w = num(tfWeight), age = num(tfAge);
-        if (validate(h, 50, 250, "validate.height") != null
-                || validate(w, 10, 300, "validate.weight") != null
-                || validate(age, 1, 120, "validate.age") != null) {
-            toast.error(I18nUtil.t("input.savedEmpty"));
-            return;
+        submitting = true;
+        btnModify.setDisable(true);
+        try {
+            if (selectedRecord == null) {
+                toast.warning(I18nUtil.t("input.noneSelected"));
+                return;
+            }
+            Double h = num(tfHeight), w = num(tfWeight), age = num(tfAge);
+            if (validate(h, 50, 250, "validate.height") != null
+                    || validate(w, 10, 300, "validate.weight") != null
+                    || validate(age, 1, 120, "validate.age") != null) {
+                toast.error(I18nUtil.t("input.savedEmpty"));
+                return;
+            }
+            BodyRecord r = new BodyRecord();
+            r.setId(selectedRecord.getId());
+            r.setUserId(userId);
+            int gender = I18nUtil.t("input.male").equals(cbGender.getValue()) ? 1 : 0;
+            r.setAge(age.intValue());
+            r.setGender(gender);
+            r.setMeasureTime(selectedRecord.getMeasureTime());
+            applyExtensions(r);
+            r.setHeight(h);
+            r.setWeight(w);
+            recordController.updateRecord(r);
+            toast.success(I18nUtil.t("input.savedOk", 1));
+        } catch (Exception ex) {
+            System.err.println("[BMI][ERROR] InputView.doModify failed: " + ex.getMessage());
+            ToastBar.showError(I18nUtil.t("input.saveError"));
+        } finally {
+            submitting = false;
+            btnModify.setDisable(false);
         }
-        BodyRecord r = new BodyRecord();
-        r.setId(selectedRecord.getId());
-        r.setUserId(userId);
-        int gender = I18nUtil.t("input.male").equals(cbGender.getValue()) ? 1 : 0;
-        r.setAge(age.intValue());
-        r.setGender(gender);
-        r.setMeasureTime(selectedRecord.getMeasureTime());
-        applyExtensions(r);
-        r.setHeight(h);
-        r.setWeight(w);
-        recordController.updateRecord(r);
-        toast.success(I18nUtil.t("input.savedOk", 1));
-        onDataChanged.run();
     }
 
     private void applyExtensions(BodyRecord r) {
@@ -406,6 +556,10 @@ public class InputView extends BorderPane implements LangChangeListener {
         btnSave.setText(I18nUtil.t("input.save"));
         btnLoad.setText(I18nUtil.t("input.loadHistory"));
         btnModify.setText(I18nUtil.t("input.modify"));
+        bmiCard.refresh();
+        for (Label opt : optionalLabels) {
+            opt.setText(I18nUtil.t("input.optional"));
+        }
         for (int i = 0; i < diseaseBoxes.size(); i++) {
             String[] keys = {"input.disease.hypertension", "input.disease.diabetes",
                     "input.disease.heart", "input.disease.hyperlipid", "input.disease.fattyliver"};

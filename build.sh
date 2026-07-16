@@ -4,7 +4,7 @@ JAVAC="D:/Program Files/Eclipse Adoptium/jdk-17.0.18.8-hotspot/bin/javac"
 JFX_LIB="D:/Users/Downloads/openjfx-21.0.11_windows-x64_bin-sdk/javafx-sdk-21.0.11/lib"
 OUT="out"
 rm -rf "$OUT" && mkdir -p "$OUT"
-FX_FLAGS=(--module-path "$JFX_LIB" --add-modules javafx.controls,javafx.graphics)
+FX_FLAGS=(--module-path "$JFX_LIB" --add-modules javafx.controls,javafx.graphics,javafx.swing)
 echo "JDK : $JAVAC"
 echo "JFX : $JFX_LIB"
 echo "OUT : $OUT"
@@ -12,8 +12,7 @@ echo
 echo "==> [1/4] Base: i18n + model"
 "$JAVAC" -encoding UTF-8 -d "$OUT" "${FX_FLAGS[@]}" -cp "$OUT" \
   $(find src/com/bmi/i18n -name "*.java") \
-  src/com/bmi/model/User.java \
-  src/com/bmi/model/BodyRecord.java
+  $(find src/com/bmi/model -maxdepth 1 -name "*.java")
 echo "==> [2/4] Business: model.ai + model.db"
 "$JAVAC" -encoding UTF-8 -d "$OUT" "${FX_FLAGS[@]}" -cp "$OUT" \
   $(find src/com/bmi/model/ai src/com/bmi/model/db -name "*.java" ! -name "JdbcRecordDaoChainTest.java")

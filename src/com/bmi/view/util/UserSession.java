@@ -1,5 +1,7 @@
 package com.bmi.view.util;
 
+import com.bmi.controller.RecordController;
+import com.bmi.model.BodyRecord;
 import com.bmi.model.User;
 
 import java.security.SecureRandom;
@@ -60,6 +62,9 @@ public final class UserSession {
 
     // —— 既往疾病（选填，展示名列表）——
     private final List<String> diseases = new ArrayList<>();
+
+    // —— 持久化桥接：与主界面共享同一 RecordController（由 BmiApplication 注入）——
+    private RecordController recordController;
 
     // ==================== 注册账号注册表（内存） ====================
     
@@ -146,6 +151,26 @@ public final class UserSession {
         if (diseases != null) this.diseases.addAll(diseases);
     }
 
+    /**
+     * 注入持久化控制器（由 BmiApplication 在装配主控制器后调用），
+     * 使会话录入数据与主界面读取同源。未注入时 {@link #syncToDatabase()} 会惰性自建。
+     */
+    public void setRecordController(RecordController recordController) {
+        this.recordController = recordController;
+    }
+
+    /** 获取持久化控制器：优先使用注入实例，否则惰性自建（容错，失败返回 null）。 */
+    private RecordController getRecordController() {
+        if (recordController == null) {
+            try {
+                recordController = new RecordController(new com.bmi.model.db.JdbcRecordDao());
+            } catch (Exception e) {
+                return null;
+            }
+        }
+        return recordController;
+    }
+
     // ===================== 读取体质数据 =====================
 
     public User getUser() { return user; }
@@ -170,13 +195,45 @@ public final class UserSession {
         return Math.round((weight / (m * m)) * 10.0) / 10.0;
     }
 
-    // ===================== 预留空接口 =====================
+    // ===================== 持久化桥接 =====================
 
     /**
-     * 预留同步数据库空接口：当前仅 UI 层内存存储，不实现任何持久化逻辑。
-     * 后续若后端开放持久化能力，可在此桥接（保持 UI 层调用点不变）。
+     * 将当前会话的体检数据同步写入数据库（替换原 no-op 空实现）。
+     *
+     * <p>必填项（身高/体重/年龄/性别）不全时跳过落库；扩展字段（围度/体征/疾病）
+     * 原样透传。复用 {@link #getRecordController()} 获取控制器，与登录前置录入、
+     * 主界面读取保持同源。整段包裹容错，任何异常均吞掉，绝不阻断 GUI 启动或交互。
      */
-    public void syncToDatabase() { /* reserved: no-op */ }
+    public void syncToDatabase() {
+        if (user == null || height == null || weight == null || age == null || gender == null) {
+            return;
+        }
+        RecordController rc = getRecordController();
+        if (rc == null) {
+            return;
+        }
+        try {
+            long uid = user.getId();
+            int genderInt = "M".equals(gender) ? 1 : 0;
+            BodyRecord r = rc.createRecord(uid, height, weight, age, genderInt, null);
+            if (r == null) {
+                return;
+            }
+            r.setWaistCircum(waist);
+            r.setHipCircum(hip);
+            r.setWristCircum(wrist);
+            r.setNeckCircum(neck);
+            r.setSystolicBp(systolic);
+            r.setDiastolicBp(diastolic);
+            r.setHeartRate(heartRate);
+            r.setVisceralFat(visceralFat);
+            r.setDiseases(diseases.isEmpty() ? null : String.join(",", diseases));
+            rc.updateRecord(r);
+        } catch (Exception e) {
+            // 持久化失败时仅静默放弃，不向上抛出，避免影响前端交互
+            System.err.println("[BMI][WARN] UserSession.syncToDatabase failed: " + e.getMessage());
+        }
+    }
 
     /** 清空当前会话（退出登录时调用）。保留注册表（跨会话持久）。 */
     public void clear() {

@@ -31,6 +31,7 @@ public class SettingsView extends VBox implements LangChangeListener, ThemeChang
     private final long userId;
     private final SettingController settingController;
     private final ToastBar toast;
+    private final Runnable onOpenPhoto;
 
     private final Button closeBtn = new Button("\u2715");
     private final ComboBox<Lang> langCombo = new ComboBox<>();
@@ -43,8 +44,10 @@ public class SettingsView extends VBox implements LangChangeListener, ThemeChang
     private final Button pfEditBtn = StyleFactory.secondaryButton("setting.profile.edit");
     private final Button btnSave = StyleFactory.primaryButton("setting.save");
 
-    public SettingsView(long userId, SettingController settingController, ToastBar toast) {
+    public SettingsView(long userId, SettingController settingController, ToastBar toast,
+                        Runnable onOpenPhoto) {
         this.userId = userId; this.settingController = settingController; this.toast = toast;
+        this.onOpenPhoto = onOpenPhoto;
 
         setSpacing(0);
         setPadding(new Insets(0));
@@ -104,7 +107,7 @@ public class SettingsView extends VBox implements LangChangeListener, ThemeChang
 
         Button btnAddPhoto = StyleFactory.primaryButton("photo.upload");
         btnAddPhoto.setMaxWidth(200);
-        btnAddPhoto.setOnAction(e -> ToastBar.showWarning(I18nUtil.t("page.todo")));
+        btnAddPhoto.setOnAction(e -> { if (onOpenPhoto != null) onOpenPhoto.run(); });
 
         HBox tableHeader = new HBox(10,
                 new Label(I18nUtil.t("photo.filename")),
@@ -173,8 +176,15 @@ public class SettingsView extends VBox implements LangChangeListener, ThemeChang
         });
 
         fontSizeCombo.getItems().addAll("S", "M", "L", "XL");
-        fontSizeCombo.setValue("M");
-        fontSizeCombo.setOnAction(e -> ToastBar.showSuccess(I18nUtil.t("setting.applied")));
+        fontSizeCombo.setValue(AppConfig.getInstance().getFontSize());
+        fontSizeCombo.setOnAction(e -> {
+            String code = fontSizeCombo.getValue();
+            if (code != null) {
+                AppConfig.getInstance().setFontSize(code);
+                applyFontSize(code);
+            }
+            ToastBar.showSuccess(I18nUtil.t("setting.applied"));
+        });
 
         GridPane grid = new GridPane();
         grid.setHgap(12); grid.setVgap(10);
@@ -248,7 +258,9 @@ public class SettingsView extends VBox implements LangChangeListener, ThemeChang
 
     private Node buildStorageCard() {
         storagePathField.setPromptText(I18nUtil.t("storage.default"));
-        storagePathField.setEditable(false);
+        storagePathField.setEditable(true);
+        String saved = AppConfig.getInstance().getStoragePath();
+        if (saved != null && !saved.isEmpty()) storagePathField.setText(saved);
 
         btnClearPath.setOnAction(e -> { storagePathField.clear(); toast.success(I18nUtil.t("setting.applied")); });
 
@@ -261,7 +273,7 @@ public class SettingsView extends VBox implements LangChangeListener, ThemeChang
     private Node buildProfileCard() {
         pfName.setPromptText(I18nUtil.t("setting.profile.name"));
 
-        pfEditBtn.setOnAction(e -> ToastBar.showWarning(I18nUtil.t("page.todo")));
+        pfEditBtn.setOnAction(e -> { if (onOpenPhoto != null) onOpenPhoto.run(); });
 
         GridPane grid = new GridPane();
         grid.setHgap(10); grid.setVgap(8);
@@ -273,6 +285,22 @@ public class SettingsView extends VBox implements LangChangeListener, ThemeChang
     private void doSave() {
         Lang l = langCombo.getValue();
         if (l != null) settingController.setLangDefault(l.getCode());
+
+        String path = storagePathField.getText().trim();
+        if (!path.isEmpty()) {
+            java.io.File dir = new java.io.File(path);
+            if (!dir.exists() && !dir.mkdirs()) {
+                toast.error(I18nUtil.t("storage.invalid"));
+                return;
+            }
+            if (!dir.isDirectory() || !dir.canWrite()) {
+                toast.error(I18nUtil.t("storage.invalid"));
+                return;
+            }
+            AppConfig.getInstance().setStoragePath(path);
+        } else {
+            AppConfig.getInstance().setStoragePath("");
+        }
         toast.success(I18nUtil.t("setting.applied"));
     }
 
@@ -283,6 +311,21 @@ public class SettingsView extends VBox implements LangChangeListener, ThemeChang
                 setText(empty || item == null ? "" : item.getDisplay());
             }
         };
+    }
+
+    /** 实时字号缩放：将当前字号（S/M/L/XL）映射到 px 并应用到场景根节点。 */
+    private void applyFontSize(String code) {
+        double px = fontSizePx(code);
+        if (getScene() != null && getScene().getRoot() != null) {
+            getScene().getRoot().setStyle("-fx-font-size:" + px + "px;");
+        }
+    }
+
+    private double fontSizePx(String code) {
+        if ("S".equals(code)) return 12;
+        if ("L".equals(code)) return 16;
+        if ("XL".equals(code)) return 18;
+        return 14;
     }
 
     @Override public void onLangChange() { rebuild(); }

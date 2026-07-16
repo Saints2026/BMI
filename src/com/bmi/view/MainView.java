@@ -47,6 +47,9 @@ public class MainView extends StackPane implements LangChangeListener, ThemeChan
     private final SettingController settingController;
     private final Consumer<User> onLogout;
 
+    /** 全局当前实例（供 PageNavigator.forceHome 复用，强制切回首页）。 */
+    private static MainView current;
+
     private final ToastBar toast = new ToastBar();
     private final BorderPane root = new BorderPane();
     private final VBox sidebar = new VBox(4);
@@ -73,6 +76,7 @@ public class MainView extends StackPane implements LangChangeListener, ThemeChan
         this.aiController = aiController; this.photoController = photoController;
         this.reportController = reportController; this.settingController = settingController;
         this.onLogout = onLogout;
+        current = this; // 记录全局当前实例，供 PageNavigator.forceHome 复用强制切回首页
 
         buildSidebar();
         buildTopBar();
@@ -87,6 +91,18 @@ public class MainView extends StackPane implements LangChangeListener, ThemeChan
             applyTheme(t);
             if ("home".equals(currentPage)) showHome();
         });
+
+        // 应用启动时恢复持久化的字号缩放
+        sceneProperty().addListener((o, oldS, newS) -> {
+            if (newS != null) applyFontSize(AppConfig.getInstance().getFontSize());
+        });
+    }
+
+    /** 实时字号缩放：将 S/M/L/XL 映射到 px 并应用到场景根节点。 */
+    private void applyFontSize(String code) {
+        double px = "S".equals(code) ? 12 : "L".equals(code) ? 16 : "XL".equals(code) ? 18 : 14;
+        if (getScene() != null && getScene().getRoot() != null)
+            getScene().getRoot().setStyle("-fx-font-size:" + px + "px;");
     }
 
     private void buildSidebar() {
@@ -95,11 +111,10 @@ public class MainView extends StackPane implements LangChangeListener, ThemeChan
         sidebarLogo.getStyleClass().add("bmi-sidebar-logo");
         sidebar.getChildren().add(sidebarLogo);
 
-        String[] navKeys = {"nav.home", "nav.input", "nav.history", "nav.ai", "nav.photo", "nav.report", "nav.setting"};
+        String[] navKeys = {"nav.home", "nav.input", "nav.history", "nav.chart", "nav.ai", "nav.photo", "nav.report", "nav.setting"};
         Runnable[] actions = {
-                this::showHome, this::showInput, this::showHistory,
-                () -> showPlaceholder("nav.ai"), () -> showPlaceholder("nav.photo"),
-                () -> showPlaceholder("nav.report"), this::showSettings};
+                this::showHome, this::showInput, this::showHistory, this::showChart,
+                this::showAiAnalysis, this::showPhoto, this::showReport, this::showSettings};
 
         for (int i = 0; i < navKeys.length; i++) {
             Button b = new Button(I18nUtil.t(navKeys[i]));
@@ -196,8 +211,8 @@ public class MainView extends StackPane implements LangChangeListener, ThemeChan
         Button bPhoto = StyleFactory.warningFnButton("home.quick.photo");
         Button bAi = StyleFactory.dangerFnButton("home.quick.ai");
         bInput.setOnAction(e -> showInput());
-        bPhoto.setOnAction(e -> showPlaceholder("nav.photo"));
-        bAi.setOnAction(e -> showPlaceholder("nav.ai"));
+        bPhoto.setOnAction(e -> showPhoto());
+        bAi.setOnAction(e -> showAiAnalysis());
         HBox actionBtns = new HBox(16, bInput, bPhoto, bAi);
         actionBtns.setAlignment(Pos.CENTER);
         HBox.setHgrow(bInput, Priority.ALWAYS);
@@ -208,6 +223,20 @@ public class MainView extends StackPane implements LangChangeListener, ThemeChan
         root.setCenter(home);
         setActiveNav("nav.home");
         currentPage = "home";
+    }
+
+    /** 全局当前实例（供 PageNavigator.forceHome 复用，强制切回首页）。 */
+    public static MainView getCurrent() {
+        return current;
+    }
+
+    /** 强制将 center 重绘为首页组件（兜底跳转，不重建窗口）。 */
+    public void forceHome() {
+        if (user == null) {
+            System.err.println("[BMI][WARN] MainView.forceHome: user 为空，无法重绘首页");
+            return;
+        }
+        showHome();
     }
 
     private HBox buildMetricCards(BodyRecord latest, ThemeConstant.Theme curTheme) {
@@ -224,13 +253,15 @@ public class MainView extends StackPane implements LangChangeListener, ThemeChan
         double sys = latest.getSystolicBp() != null ? latest.getSystolicBp().doubleValue() : 0;
         double dia = latest.getDiastolicBp() != null ? latest.getDiastolicBp().doubleValue() : 0;
         double bf = round1(latest.getBodyFat());
+        Double waist = latest.getWaistCircum();
 
         String bmiColor = ThemeConstant.bmiGradeColor(bmi);
         cards.getChildren().addAll(
                 buildMetricCard("card.bmi", bmi + "", grade, bmiColor),
                 buildMetricCard("card.bp", (int)sys + "/" + (int)dia, bpStatus(sys, dia), curTheme.primary() + "33"),
                 buildMetricCard("card.bodyfat", bf + "%", gradeNameBf(bf), curTheme.warning() + "44"),
-                buildMetricCard("card.waist", waistRiskStatus() + "", waistRiskStatusDetail(), curTheme.success() + "38"));
+                buildMetricCard("card.waist", waist == null ? "--" : String.valueOf((int) Math.round(waist)),
+                        waistRiskStatus(waist), curTheme.success() + "38"));
         return cards;
     }
 
@@ -264,8 +295,10 @@ public class MainView extends StackPane implements LangChangeListener, ThemeChan
         if (bf < 25) return I18nUtil.t("grade.normal");
         return I18nUtil.t("grade.overweight");
     }
-    private String waistRiskStatus() { return "82"; }
-    private String waistRiskStatusDetail() { return I18nUtil.t("status.low") + "cm"; }
+    private String waistRiskStatus(Double waist) {
+        if (waist == null) return I18nUtil.t("status.unknown");
+        return waist < 85 ? I18nUtil.t("status.low") : I18nUtil.t("status.high");
+    }
 
     private LineChart<Number, Number> makeMiniChart(java.util.function.ToDoubleFunction<BodyRecord> f,
                                                     String color, List<BodyRecord> all) {
@@ -293,8 +326,7 @@ public class MainView extends StackPane implements LangChangeListener, ThemeChan
 
     private void showInput() {
         if (inputView == null)
-            inputView = new InputView(user.getId(), recordController, chartController,
-                    this::onDataChanged, toast);
+            inputView = new InputView(user, recordController, chartController, toast);
         root.setCenter(inputView);
         setActiveNav("nav.input");
         currentPage = "input";
@@ -309,8 +341,7 @@ public class MainView extends StackPane implements LangChangeListener, ThemeChan
 
     private void editFromHistory(BodyRecord r) {
         if (inputView == null)
-            inputView = new InputView(user.getId(), recordController, chartController,
-                    this::onDataChanged, toast);
+            inputView = new InputView(user, recordController, chartController, toast);
         inputView.loadRecord(r);
         root.setCenter(inputView);
         setActiveNav("nav.input");
@@ -319,31 +350,38 @@ public class MainView extends StackPane implements LangChangeListener, ThemeChan
     }
 
     private void showChart() {
-        ChartPopup popup = new ChartPopup(user.getId(), chartController);
-        popup.show();
+        if (chartView == null)
+            chartView = new ChartView(user.getId(), chartController);
+        StackPane wrap = new StackPane(chartView, new ToastBar());
+        root.setCenter(wrap);
         setActiveNav("nav.chart");
+        currentPage = "nav.chart";
     }
 
     private void showSettings() {
         if (settingsView != null) settingsView.dispose();
-        settingsView = new SettingsView(user.getId(), settingController, toast);
+        settingsView = new SettingsView(user.getId(), settingController, toast, this::showPhoto);
         root.setCenter(settingsView);
         setActiveNav("nav.setting");
         currentPage = "setting";
     }
 
-    private void showPlaceholder(String key) {
-        VBox box = new VBox(10);
-        box.setPadding(new Insets(24));
-        box.setStyle("-fx-background-color:" + ThemeConstant.DEFAULT_THEME.bg() + ";");
-        box.getChildren().addAll(new Label(I18nUtil.t(key)), new Label(I18nUtil.t("page.todo")));
-        root.setCenter(box);
-        setActiveNav(key);
-        currentPage = key;
+    private void showAiAnalysis() {
+        root.setCenter(new AiAnalysisView(user, aiController, chartController, new ToastBar()));
+        setActiveNav("nav.ai");
+        currentPage = "nav.ai";
     }
 
-    private void onDataChanged() {
-        if ("home".equals(currentPage)) showHome();
+    private void showPhoto() {
+        root.setCenter(new PhotoView(user, photoController, recordController, new ToastBar()));
+        setActiveNav("nav.photo");
+        currentPage = "nav.photo";
+    }
+
+    private void showReport() {
+        root.setCenter(new ReportView(user.getId(), reportController, recordController, new ToastBar()));
+        setActiveNav("nav.report");
+        currentPage = "nav.report";
     }
 
     private double round1(double v) { return Math.round(v * 10.0) / 10.0; }

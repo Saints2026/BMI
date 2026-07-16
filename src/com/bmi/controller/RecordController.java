@@ -4,8 +4,9 @@ import com.bmi.model.BodyRecord;
 import com.bmi.model.db.RecordDao;
 
 import java.sql.Timestamp;
-import java.text.ParseException;
-import java.text.SimpleDateFormat;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
 import java.util.List;
 
 /**
@@ -17,7 +18,6 @@ import java.util.List;
 public class RecordController {
 
     private final RecordDao recordDao;
-    private static final SimpleDateFormat SDF = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
 
     public RecordController(RecordDao recordDao) {
         this.recordDao = recordDao;
@@ -53,10 +53,11 @@ public class RecordController {
         r.setGender(gender);
         try {
             r.setMeasureTime(measureTime == null || measureTime.isEmpty()
-                    ? new Timestamp(System.currentTimeMillis())
-                    : new Timestamp(SDF.parse(measureTime).getTime()));
-        } catch (ParseException e) {
-            r.setMeasureTime(new Timestamp(System.currentTimeMillis()));
+                    ? LocalDateTime.now()
+                    : LocalDateTime.parse(measureTime,
+                            DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")));
+        } catch (DateTimeParseException e) {
+            r.setMeasureTime(LocalDateTime.now());
         }
         recordDao.insert(r);
         return r;
@@ -70,18 +71,18 @@ public class RecordController {
      * 分页查询历史记录（按 id 倒序，最新在前），v1.1 支撑 HistoryView 分页表格。
      */
     public List<BodyRecord> queryRecordsPage(long userId, int page, int size) {
-        return recordDao.queryByUserPage(userId, page, size);
+        return recordDao.queryByUserPage(userId, page, size).getData();
     }
 
     /**
      * 带时间筛选的分页查询（按测量时间倒序），v1.1 支撑 HistoryView 时间筛选 + 分页。
      */
     public List<BodyRecord> queryRecordsPage(long userId, Timestamp start, Timestamp end, int page, int size) {
-        return recordDao.queryByUserPage(userId, start, end, page, size);
+        return recordDao.queryByUserPage(userId, start, end, page, size).getData();
     }
 
-    public void deleteRecord(long id) {
-        recordDao.deleteById(id);
+    public void deleteRecord(long id, long userId) {
+        recordDao.deleteById(id, userId);
     }
 
     /**
