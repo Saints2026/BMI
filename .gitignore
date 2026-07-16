@@ -17,3 +17,4 @@ ai-key.properties
 Thumbs.db
 # WorkBuddy缓存
 .codebuddy/tmp.workbuddy/
+.workbuddy/
