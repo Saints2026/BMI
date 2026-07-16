@@ -1,8 +1,10 @@
 # BMI 系统数据库连接配置模板（MySQL）
 # 复制本文件为 db-config.properties 后填写真实值；db-config.properties 已被 .gitignore 忽略，切勿提交。
-# 切换到 SQLite 时：db.type=sqlite，db.url=jdbc:sqlite:bmi.db
+# 切换到 SQLite 时：
+#   db.driver=org.sqlite.JDBC
+#   db.url=jdbc:sqlite:bmi.db
 
-db.type=mysql
+db.driver=com.mysql.cj.jdbc.Driver
 db.url=jdbc:mysql://localhost:3306/bmi?useUnicode=true&characterEncoding=utf8mb4&serverTimezone=Asia/Shanghai
 db.user=root
 db.password=your_password_here

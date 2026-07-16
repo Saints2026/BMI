@@ -96,15 +96,16 @@ public class JdbcRecordDao implements RecordDao {
     }
 
     @Override
-    public List<BodyRecord> queryByUserPage(long userId, int page, int size) {
+    public PageResult<BodyRecord> queryByUserPage(long userId, int page, int size) {
         return queryByUserPage(userId, null, null, page, size);
     }
 
     @Override
-    public List<BodyRecord> queryByUserPage(long userId, Timestamp start, Timestamp end, int page, int size) {
+    public PageResult<BodyRecord> queryByUserPage(long userId, Timestamp start, Timestamp end, int page, int size) {
         if (page < 1) page = 1;
         if (size <= 0) size = 10;
         int offset = (page - 1) * size;
+        long total = countByUser(userId, start, end);
         StringBuilder sql = new StringBuilder(SELECT_ALL);
         buildWhereClause(sql, start, end);
         sql.append(" LIMIT ? OFFSET ?");
@@ -121,7 +122,7 @@ public class JdbcRecordDao implements RecordDao {
             rs = ps.executeQuery();
             List<BodyRecord> list = new ArrayList<>();
             while (rs.next()) list.add(mapRecord(rs));
-            return list;
+            return new PageResult<>(list, total, page, size);
         } catch (SQLException e) {
             throw new DataAccessException("Failed to page query records for userId: " + userId, e);
         } finally {
@@ -130,17 +131,18 @@ public class JdbcRecordDao implements RecordDao {
     }
 
     @Override
-    public boolean deleteById(long id) {
-        String sql = "DELETE FROM body_record WHERE id = ?";
+    public boolean deleteById(long id, long userId) {
+        String sql = "DELETE FROM body_record WHERE id = ? AND user_id = ?";
         Connection conn = null;
         PreparedStatement ps = null;
         try {
             conn = JdbcUtil.getConnection();
             ps = conn.prepareStatement(sql);
             ps.setLong(1, id);
+            ps.setLong(2, userId);
             return ps.executeUpdate() > 0;
         } catch (SQLException e) {
-            throw new DataAccessException("Failed to delete record id: " + id, e);
+            throw new DataAccessException("Failed to delete record id: " + id + " for userId: " + userId, e);
         } finally {
             JdbcUtil.close(conn, ps);
         }
@@ -228,6 +230,30 @@ public class JdbcRecordDao implements RecordDao {
             JdbcUtil.close(conn, ps, rs);
         }
         return null;
+    }
+
+    private long countByUser(long userId, Timestamp start, Timestamp end) {
+        StringBuilder sql = new StringBuilder("SELECT COUNT(*) FROM body_record WHERE user_id = ?");
+        if (start != null) sql.append(" AND measure_time >= ?");
+        if (end != null) sql.append(" AND measure_time <= ?");
+        Connection conn = null;
+        PreparedStatement ps = null;
+        ResultSet rs = null;
+        try {
+            conn = JdbcUtil.getConnection();
+            ps = conn.prepareStatement(sql.toString());
+            ps.setLong(1, userId);
+            int idx = 2;
+            if (start != null) ps.setTimestamp(idx++, start);
+            if (end != null) ps.setTimestamp(idx++, end);
+            rs = ps.executeQuery();
+            if (rs.next()) return rs.getLong(1);
+        } catch (SQLException e) {
+            throw new DataAccessException("Failed to count records for userId: " + userId, e);
+        } finally {
+            JdbcUtil.close(conn, ps, rs);
+        }
+        return 0;
     }
 
     private String buildWhereClause(StringBuilder sql, Timestamp start, Timestamp end) {

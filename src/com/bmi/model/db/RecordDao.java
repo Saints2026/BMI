@@ -37,9 +37,9 @@ public interface RecordDao {
      * @param userId 用户 ID
      * @param page   页码（从 1 开始）
      * @param size   每页条数
-     * @return 记录列表
+     * @return 分页结果（含当前页数据、总记录数、总页数）
      */
-    List<BodyRecord> queryByUserPage(long userId, int page, int size);
+    PageResult<BodyRecord> queryByUserPage(long userId, int page, int size);
 
     /**
      * 按用户 ID 和时间范围分页查询。
@@ -49,17 +49,18 @@ public interface RecordDao {
      * @param end    结束时间（含），为 null 时不限
      * @param page   页码（从 1 开始）
      * @param size   每页条数
-     * @return 记录列表
+     * @return 分页结果（含当前页数据、总记录数、总页数）
      */
-    List<BodyRecord> queryByUserPage(long userId, Timestamp start, Timestamp end, int page, int size);
+    PageResult<BodyRecord> queryByUserPage(long userId, Timestamp start, Timestamp end, int page, int size);
 
     /**
-     * 按主键删除记录。
+     * 按主键 + 用户 ID 删除记录（防越权）。
      *
-     * @param id 记录 ID
+     * @param id     记录 ID
+     * @param userId 所属用户 ID
      * @return true 删除成功
      */
-    boolean deleteById(long id);
+    boolean deleteById(long id, long userId);
 
     /**
      * 更新一条记录的全部字段（含扩展字段），限定 user_id 防越权。

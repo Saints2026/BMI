@@ -1,4 +1,6 @@
-package com.bmi.model;
+package com.bmi.model.ai;
+
+import com.bmi.model.BmiCategory;
 
 /**
  * BMI 与体脂计算工具类。

@@ -10,6 +10,8 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.Properties;
+import java.util.concurrent.Executor;
+import java.util.concurrent.Executors;
 
 /**
  * JDBC 连接工具类，负责数据库连接的建立与资源释放。
@@ -26,6 +28,13 @@ public class JdbcUtil {
 
     /** 读取超时（毫秒），遵循 CODEBUDDY.md \u00a74.2 全大写下划线常量命名 */
     private static final int READ_TIMEOUT_MS = 10000;
+
+    /** setNetworkTimeout 使用的单线程 Executor（复用，避免每次创建线程池） */
+    private static final Executor NETWORK_TIMEOUT_EXECUTOR = Executors.newSingleThreadExecutor(r -> {
+        Thread t = new Thread(r, "jdbc-network-timeout");
+        t.setDaemon(true);
+        return t;
+    });
 
     private static String URL;
     private static String USER;
@@ -60,7 +69,17 @@ public class JdbcUtil {
      * @throws SQLException 连接失败时抛出
      */
     public static Connection getConnection() throws SQLException {
+        // 应用连接超时（单位：秒）
+        DriverManager.setLoginTimeout(CONNECT_TIMEOUT_MS / 1000);
         Connection conn = DriverManager.getConnection(URL, USER, PASSWORD);
+        // 应用读取超时（SQLite 不支持 setNetworkTimeout，跳过）
+        if (!isSqlite) {
+            try {
+                conn.setNetworkTimeout(NETWORK_TIMEOUT_EXECUTOR, READ_TIMEOUT_MS);
+            } catch (SQLException ignored) {
+                // 驱动不支持时忽略，不影响主流程
+            }
+        }
         if (isSqlite) {
             try (Statement stmt = conn.createStatement()) {
                 stmt.execute("PRAGMA foreign_keys = ON");

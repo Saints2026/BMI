@@ -17,6 +17,9 @@ import org.junit.jupiter.api.TestMethodOrder;
 
 import com.bmi.model.BodyRecord;
 import com.bmi.model.User;
+import com.bmi.model.db.JdbcRecordDao;
+import com.bmi.model.db.JdbcUserDao;
+import com.bmi.model.db.PageResult;
 import com.bmi.model.db.RecordDao;
 import com.bmi.model.db.JdbcUtil;
 import com.bmi.model.db.UserDao;
@@ -34,8 +37,8 @@ public class MainTest {
     private static final String USERNAME = "test_bmi_user";
     private static final String PASSWORD = "Test123456";
 
-    private static UserDao userDao = new UserDao();
-    private static RecordDao recordDao = new RecordDao();
+    private static UserDao userDao = new JdbcUserDao();
+    private static RecordDao recordDao = new JdbcRecordDao();
     private static long uid;
     private static BodyRecord r1;
     private static BodyRecord r2;
@@ -114,7 +117,7 @@ public class MainTest {
     @Test
     @Order(5)
     public void test5DeleteRecord() {
-        assertTrue(recordDao.deleteById(r3.getId()), "Delete should succeed");
+        assertTrue(recordDao.deleteById(r3.getId(), uid), "Delete should succeed");
 
         List<BodyRecord> afterDelete = recordDao.listAllRecords(uid);
         assertEquals(2, afterDelete.size(), "Should have 2 records after delete");
@@ -132,8 +135,8 @@ public class MainTest {
     @Test
     @Order(7)
     public void test7QueryByPage() {
-        List<BodyRecord> page = recordDao.queryByUserPage(uid, 1, 1);
-        assertEquals(1, page.size(), "First page should have 1 record");
+        PageResult<BodyRecord> pageResult = recordDao.queryByUserPage(uid, 1, 1);
+        assertEquals(1, pageResult.getData().size());
     }
 
     @Test
