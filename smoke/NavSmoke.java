@@ -134,6 +134,21 @@ public class NavSmoke {
                 BodyRecord r2 = rc.createRecord(1L, 180, 80, 25, 0, "bad-time");
                 check(r2 != null && r2.getMeasureTime() != null, "非法时间串 -> 回退 now，无异常", ok);
 
+                // JdbcUtil 配置缺失时不抛致命异常；getConnection 抛可恢复 SQLException
+                try {
+                    boolean cfg = com.bmi.model.db.JdbcUtil.isConfigured();
+                    check(!cfg, "JdbcUtil 缺失配置 -> isConfigured()=false（不抛致命异常）", ok);
+                    boolean threwSql = false;
+                    try {
+                        com.bmi.model.db.JdbcUtil.getConnection();
+                    } catch (java.sql.SQLException e) {
+                        threwSql = true; // 期望：可恢复 SQLException，而非 ExceptionInInitializerError/NoClassDefFoundError
+                    }
+                    check(threwSql, "JdbcUtil.getConnection() 配置缺失返回 SQLException（非致命类初始化错误）", ok);
+                } catch (Throwable t2) {
+                    check(false, "JdbcUtil 缺失配置未触发致命异常（" + t2.getClass().getSimpleName() + "）", ok);
+                }
+
             } catch (Throwable t) {
                 t.printStackTrace();
                 ok.set(false);

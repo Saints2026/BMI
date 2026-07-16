@@ -9,6 +9,8 @@ import com.bmi.controller.SettingController;
 import com.bmi.controller.UserController;
 import com.bmi.i18n.AppConfig;
 import com.bmi.i18n.I18n;
+import com.bmi.view.util.I18nUtil;
+import javafx.scene.control.Alert;
 import com.bmi.model.User;
 import com.bmi.view.util.MockUserDao;
 import com.bmi.view.util.PageNavigator;
@@ -33,7 +35,12 @@ import javafx.stage.Stage;
  */
 public class BmiApplication extends Application implements PageNavigator.NavigationHost {
 
-    private final com.bmi.model.db.RecordDao recordDao = new com.bmi.model.db.JdbcRecordDao();
+    // Mock 模式：使用 MockRecordDao（内存），完全跳过 JdbcUtil / JdbcRecordDao / db-config.properties；
+    // 真实 DB 模式：使用 JdbcRecordDao（按需懒加载 JdbcUtil，配置缺失时已非致命降级）。
+    private final com.bmi.model.db.RecordDao recordDao =
+            AppConfig.getInstance().isMockDaoEnabled()
+                    ? new com.bmi.view.util.MockRecordDao()
+                    : new com.bmi.model.db.JdbcRecordDao();
     // Mock 模式开关开启时（app-config.properties 的 mock.dao.enabled=true）使用 MockUserDao
     // 脱离后端自测；否则沿用原 InMemoryUserDao。两者均实现 UserDao，不改动后端业务文件。
     private final UserController userController = new UserController(
@@ -63,6 +70,15 @@ public class BmiApplication extends Application implements PageNavigator.Navigat
         PageNavigator.init(stage, this, 1000, 700);
         System.out.println("[BMI] first screen -> RegisterView (PageNavigator will call stage.show())");
         PageNavigator.toRegister();
+        // 真实 DB 模式：启动期校验 db-config.properties 是否存在；缺失则友好提示，不抛致命异常
+        if (!AppConfig.getInstance().isMockDaoEnabled()
+                && !com.bmi.model.db.JdbcUtil.isConfigured()) {
+            Alert warn = new Alert(Alert.AlertType.WARNING);
+            warn.setTitle(I18nUtil.t("app.title"));
+            warn.setHeaderText(I18nUtil.t("db.configMissing.title"));
+            warn.setContentText(I18nUtil.t("db.configMissing"));
+            warn.showAndWait();
+        }
         System.out.println("[BMI] start() returning, stage.isShowing=" + stage.isShowing());
     }
 

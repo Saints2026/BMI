@@ -181,7 +181,16 @@ public class MainView extends StackPane implements LangChangeListener, ThemeChan
 
         Label title = StyleFactory.title("nav.home");
 
-        List<BodyRecord> all = recordController.queryRecords(user.getId(), null, null);
+        List<BodyRecord> all;
+        try {
+            all = recordController.queryRecords(user.getId(), null, null);
+        } catch (Exception ex) {
+            // 数据库查询异常仅降级提示，不阻断首页渲染 / 跳转流程
+            all = new ArrayList<>();
+            System.err.println("[BMI][WARN] MainView.showHome 历史数据加载失败（已降级，不阻断首页渲染）: "
+                    + ex.getMessage());
+            ToastBar.showError(I18nUtil.t("db.queryError"));
+        }
         BodyRecord latest = all.isEmpty() ? null : all.get(all.size() - 1);
         ThemeConstant.Theme curTheme = ThemeConstant.fromCssClass(AppConfig.getInstance().getTheme());
 

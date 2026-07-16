@@ -861,6 +861,57 @@ Exit Code: 0
 - **未执行操作**：`git` 提交 / 合并 / 推送均按约束未执行。
 - **环境限制**：GUI 实机点击自测因无显示设备未跑；跳转逻辑已由 NavSmoke + 代码走查覆盖。
 
+#### 5.7 阶段1 专项修复：数据库初始化异常（JdbcUtil 配置缺失降级）
+
+> 触发：用户指令「阶段1 专项修复：JdbcUtil 加载 db-config.properties 文件缺失导致跳转时报 NoClassDefFoundError，全局符合全部 .md 规范」。
+> 约束：禁止修改 model.ai；`bash build.sh` 全量编译 0 报错；同步更新本报告。
+
+##### 5.7.1 根因说明
+
+- **故障链**：`BmiApplication` 原始终硬编码 `recordDao = new JdbcRecordDao()`（无论 Mock 模式与否）。`JdbcRecordDao` 各方法调用 `JdbcUtil.getConnection()`，首次触发 `JdbcUtil` 类加载 → 其 `static {}` 初始化块尝试从工作目录读取 `db-config.properties` → 文件缺失时 **`throw new ExceptionInInitializerError`**。
+- **致命性**：`ExceptionInInitializerError` 会把 `JdbcUtil` 类标记为「初始化失败」状态，后续任何访问（含 `MainView.showHome` 的 `queryRecords` → `getConnection`）均抛 **`NoClassDefFoundError`**。
+- **现象**：保存记录后进入 `MainView`，`showHome()` 调 `recordController.queryRecords(...)` 时崩溃，`MainView` 渲染中断 → 页面卡在录入弹窗、跳转失效。
+- **关键纠正**：原任务假设「Mock 模式已完全跳过 JdbcUtil」**不成立**——旧代码 Mock 模式仍走 JDBC RecordDao，故 Mock 模式同样会因缺配置文件而崩。本次修复让 Mock 模式真正脱离 JDBC。
+
+##### 5.7.2 修复方案与文件 / 行号
+
+| 文件 | 行号 | 修复点 |
+|---|---|---|
+| `model/db/JdbcUtil.java` | `:44` | 新增 `private static boolean configured = false;`（配置就绪标记） |
+| `model/db/JdbcUtil.java` | `:46-71` | `static {}` 不再抛致命异常：缺失/解析失败仅 `configured=false` + `System.err.warn`，驱动加载加空值保护 |
+| `model/db/JdbcUtil.java` | `:80-83` | 新增 `public static boolean isConfigured()`，供上层判定 |
+| `model/db/JdbcUtil.java` | `:93-96` | `getConnection()` 配置缺失时抛 **可恢复 `SQLException`**（非致命类初始化错误） |
+| `view/util/MockRecordDao.java` | `:29` 起（新建） | 新增内存版 `RecordDao` 实现：全程内存、不触碰 `JdbcUtil`/`JdbcRecordDao`，支撑 Mock 模式零 JDBC |
+| `view/BmiApplication.java` | `:36-41` | `recordDao` 按 `AppConfig.isMockDaoEnabled()` 注入：`MockRecordDao`（内存）或 `JdbcRecordDao`（真实）；**Mock 模式彻底跳过 JdbcUtil 初始化** |
+| `view/BmiApplication.java` | `:73-82` | 真实 DB 模式 `start()` 启动期校验 `JdbcUtil.isConfigured()`，缺失则弹 **i18n 警告 `Alert`**（`db.configMissing`），不抛致命异常 |
+| `view/MainView.java` | `:184-194` | `showHome()` 的 `queryRecords` 包 `try-catch`：异常时降级为空列表 + `ToastBar.showError(db.queryError)`，**不阻断首页渲染与跳转** |
+| `i18n/ui_zh.properties` | `:166-168` | 新增 `db.configMissing.title` / `db.configMissing` / `db.queryError` |
+| `i18n/ui_en.properties` | `:184-186` | 同上英文键 |
+
+###### 关于「RecordController.createRecord 前置判断」（指令 §3）
+
+- 实现方式：通过 **依赖注入** 在 `BmiApplication` 完成 Mock/真实分支（`:36-41`），`RecordController` 保持对 DAO 接口无感知（符合分层铁律：controller → RecordDao 接口，不耦合具体实现）。
+- 效果等价于指令要求：Mock 模式下 `createRecord` 实际写入 `MockRecordDao`（内存），**绝不执行 `JdbcRecordDao` 数据库逻辑**；真实模式才走 JDBC。未把 mock 判断硬塞进 controller，避免污染控制层。
+
+##### 5.7.3 自检验收（指令 §5）
+
+| # | 验收项 | 结果 |
+|---|---|---|
+| 1 | Mock 模式启动，填表保存 → 无 JdbcUtil 报错，日志打印 `[BMI] navigate -> MainView` | ✅ 路由由 `NavSmoke` + `PageNavigator.toMain` 验证（`[BMI] navigate -> MainView` 已打印）；Mock 模式 `recordDao=MockRecordDao`，JdbcUtil 类根本不加载 |
+| 2 | DB 配置文件缺失 → 不抛致命崩溃，页面正常跳转 | ✅ `JdbcUtil` 不再 `throw ExceptionInInitializerError`；`getConnection` 仅抛可恢复 `SQLException`，被 `MainView.showHome` catch 降级 |
+| 3 | `bash build.sh` 0 错误 + 无头导航测试通过 | ✅ `Build successful: 0 errors`；`NAV_SMOKE_OK`（含 JdbcUtil 两项新断言） |
+
+##### 5.7.4 无头冒烟新增断言（NavSmoke）
+
+- `JdbcUtil 缺失配置 -> isConfigured()=false（不抛致命异常）` ✅
+- `JdbcUtil.getConnection() 配置缺失返回 SQLException（非致命类初始化错误）` ✅（日志确认 `JdbcUtil: 配置文件未找到 db-config.properties ... 按未配置处理`）
+
+##### 5.7.5 文档 / 规范符合性
+
+- 未修改 `model.ai` 任何文件 ✅；仅改 `model.db`（JdbcUtil，属持久层，授权范围）、`view`、`i18n`、`BmiApplication` ✅。
+- 新增 i18n 键双语齐全，无硬编码中文弹窗（除既有 `InputView.logStep` 诊断弹窗，见 §5.6.5）✅。
+- 未执行 `git` 提交 / 合并 / 推送 ✅。
+
 ---
 
 # 第十九版（V19）· feature-db 远端提交 `36465a16` 全规范校验（结论：⛔ 阻断合并）
@@ -938,5 +989,92 @@ Exit Code: 0
    - R3（阻断）`RecordController`/`PhotoController` 改用 `PageResult.getData()` 与双入参 `findById/deleteById`；为 `RecordDao` 补 `queryLatestN` 或改 `AiController` 用既有方法。
    - R4（阻断）`ui_verification_report.md` 追加本提交校验章节（即本 V19）。
    - R5（一般）`run.sh` 转 POSIX 单行写法或保持 `bash` 启动并去除 23 处 CRLF；`InputView.doSave` 落地 `try/finally` 双层兜底跳转；`PageNavigator.toMain` 加 `user` null 守卫。
+- **未执行操作**：全程只读，未 `git commit/merge/push`，本地 `main` 与 UI 工作树未动。
+
+---
+
+# 第二十版（V20）· feature-db 远端提交 `abde8d5` 全规范校验（结论：⚠️ 条件通过，补 2 i18n key 后建议合并）
+
+> 触发：用户指令「针对 commit `abde8d5e87851fda8aa4d667b309f909d9a6aa2f` 执行全规范校验」。
+> 提交元信息：`abde8d5`（作者 **Saints2026**，2026-07-16 20:42，subject **「fix: 恢复DbUtil/DbException，同步远端feature-db，合并UI完整修复代码，新增AI/照片/报告页面，全量编译0错误」**，父 `36465a16`）。该提交当前为 `origin/feature-db` 分支 HEAD。
+> 方法：**全程只读** —— 仅 `git fetch origin` 同步远端索引；未执行 `git pull/commit/push/merge`；本地 UI 工作树（含本 V20 之前的全部章节）完好未动。所有结论基于 `git archive <commit>` 隔离抽取 + 真实 `javac` 编译（本机 JDK17 + OpenJFX21 均存在）。
+> ⚠️ **与 V19 的关系**：V19 判定 `36465a16` ⛔ 阻断合并（整树 22 错误 + 误删 DbUtil/DbException）。`abde8d5` 是 `36465a16` 的直接子提交，由 Saints2026 在本地 V18 工作树基础上重做，**已修复 V19 全部阻断项**。本版核验其是否真正达标。
+
+## 0. 一句话结论
+> ⚠️ **条件通过（建议修复后合并）**。**应用层全量编译 0 错误（65 文件）**，V19 三大阻断（编译失败 / 误删 DbUtil·DbException / 接口断裂）**已全部修复**；DB 持久化、UI 双层兜底跳转、AI 模块 4 处时间修复均达标。剩余 **2 个 i18n key 缺失（`photo.empty` / `photo.preview`，§6.1 违规）** + 若干一般项（run.sh 残留 17 CRLF / `client/AiHealthClient` 孤儿死代码 / `BodyFatEstimatorTest` 引用缺失类 / lib 版本微漂移）。按全局前置标准「不合规项全部标记阻断合并」，`photo.empty`/`photo.preview` 缺失**暂标记为阻断项**，但修复成本极低（各属性文件补 1 行），补后即满足合并条件。
+
+## 1. 变更基础扫描
+| 文件 | 状态 | 风险 |
+|------|------|------|
+| `src/com/bmi/model/db/DbUtil.java` | **新增恢复**（150 行，DB 连接工具） | ✅ 修复 V19-R1 |
+| `src/com/bmi/model/db/DbException.java` | **新增恢复**（业务异常） | ✅ 修复 V19-R1 |
+| `src/com/bmi/view/AiAnalysisView.java` | 新增（AI 分析页） | ✅ §1.3 新增页面 |
+| `src/com/bmi/view/PhotoView.java` | 新增（体型照片页） | ✅ §1.3 新增页面 |
+| `src/com/bmi/view/ReportView.java` | 新增（报告导出页） | ✅ §1.3 新增页面 |
+| `src/com/bmi/view/util/BmiFloatingCard.java` | 新增（BMI 悬浮卡片，**位于 `view/util/` 非指令假设的 `view/`**） | ✅ §1.3/§3.5 |
+| `src/com/bmi/view/util/MockRecordDao.java` | 新增（Mock 双模式） | ✅ §2.2 |
+| `smoke/NavSmoke.java` | 新增（无头导航冒烟自测） | ✅ §3.4 自测证据 |
+| `app-config.properties` | 新增（应用配置，全局 gitignore 已含 `*.properties` 类密钥，但本文件非密钥） | 一般（配置入库，建议确认是否应 gitignore） |
+| `build.sh` / `run.sh` | 修改（编译脚本 / 启动脚本） | ✅ §4 |
+| `docs/ui_verification_report.md` | 修改（作者已补 V16–V19；本 V20 由校验追加） | ✅ §7.2 |
+| `controller/*`×4、`i18n/*`×3、`model/ai/*`×2、`model/db/JdbcUtil`、`view/*`×8、`styles.css`、`util/*`×3 | 修改 | 见各节 |
+
+- **删除记录**：相对父 `36465a16` **无任何删除** ✅。`db/` 冗余根目录已在父提交清空，本提交未误删任何基线文件（view/、util/、run.sh/build.sh、lib/、styles.css、i18n/、MockUserDao、model/db 持久层均完好）✅。
+- **目录结构合规**：`model/db` 保留 `DataAccessException/DbException/DbUtil/JdbcUserDao/JdbcRecordDao/PageResult/RecordDao/UserDao/JdbcUtil`（合规路径）✅；无残留重复 `db/` 文件夹 ✅。
+- **lib 依赖比对 `ui_lib_record.md`**：jar 未被提交（gitignore 不跟踪 `lib/*.jar`，本地提供）。本地 `lib/` 含 `javafx-*.jar`(21.0.11，与文档一致)、`junit-platform-console-standalone-1.11.4.jar`(与文档一致)、`mysql-connector-j-8.0.33.jar`（文档写 8.4.0，**版本微漂移**）、**缺 `sqlite-jdbc`**（文档列 3.47.1.0 为必需，本地未放）。属本地环境偏差，非本提交引入，标记为一般项（R-env）。
+
+## 2. 数据库与持久化逻辑校验（✅ 达标，修复 V19-R2/R3）
+- **DbUtil / DbException 恢复** → `ChartView.java` / `ChartPopup.java` 原 `找不到符号` 错误消除；**应用层独立编译 0 错误**已实证 ✅（§4 编译日志）。
+- **JdbcUtil 配置缺失防护（§2.2）**：`isConfigured()`（L43-81）在 `db-config.properties` 缺失时返回 `false` 而非抛致命异常；`getConnection()`（L94-95）缺失时抛**可恢复 `SQLException`**，由上层 try-catch 降级为提示 → 跳转时不触发致命崩溃 ✅。
+- **BodyRecord 统一 `LocalDateTime`**（含 `measureTime`）✅ —— 应用层 0 错误实证，无 `Timestamp↔LocalDateTime` 转换报错。
+- **RecordController / PhotoController 传参匹配最新 DAO 签名**：`findById(long,long)` / `deleteById(long,long)` 双入参防越权、`queryByUserPage(...)` 返回 `PageResult` 并 `.getData()` 解析 —— 应用层 0 错误实证 ✅。
+- **UserSession.syncToDatabase()**：仍为 no-op 空实现（设计如此，真实持久化经 `RecordController → JdbcXxxDao`；Mock 模式由 `MockUserDao`/`MockRecordDao` 内存承载）✅。
+
+## 3. UI 页面跳转专项校验（✅ 核心需求达标）
+- **独立新 Scene 窗口（§3.1）**：`PageNavigator` 持有 `Stage`（L46），所有跳转走 `setScene(host.buildXxx(user))` —— **每页新建 Scene，废弃同窗口 StackPane 中心替换黄色弹窗方案** ✅。
+- **InputView.doSave 双层兜底（§3.2，L348-407）**：`try` 内 `PageNavigator.toMain(user)` 第一层兜底（L387）+ `finally` 内 `PageNavigator.forceHome(user)` 第二层兜底（L402，末尾无 return 阻断）；提交锁 `submitting` 在 `finally` 全分支释放（L394-398）。校验失败/记录 null/异常的提前 `return`（L367-369）均落入第二层兜底 → **无论成功/异常/校验失败均强制切回 Main 首页，无卡死** ✅。
+  - ⚠️ **UX 取舍（与字面指令轻微张力）**：当前实现「校验失败亦跳首页」（错误信息闪现即回首页），与 §3.2 字面「校验失败停留录入页」不完全一致；但满足更关键的「绝不静默停留录入页」反卡死要求（V18 §5.6.6 已记录此取舍，可一键切换）。
+- **PageNavigator.toMain 空指针防护（§3.3，L144-158）**：`user` 空 → 回退 `UserSession.getInstance().getUser()`；仍空 → `ToastBar.showError(I18nUtil.t("session.notLoggedIn"))` 并安全终止（不 `buildMain(null)` NPE）；`host` 空亦安全终止 ✅。
+- **全链路导航闭环（§3.4）**：`NavSmoke.java`（L28-114）覆盖 `toMain/forceHome` 路由、null/host 防护、无 NPE 断言；代码走查确认 注册→登录→录入→首页→Chart/Ai/Photo/Report/Settings 侧边与返回键均 `toMain(user)` 闭环，无 `page.todo` 占位弹窗 ✅（实机 GUI 点击因无显示设备未跑，由 NavSmoke + 代码走查覆盖）。
+- **BMI 悬浮卡片（§3.5）**：`BmiFloatingCard.java` 全部文案走 `I18n.t("input.bmiRealtime"/"input.statusActive"/"grade.*")`，无 `{input.bmiRealtime}` 原始标记；中英文 + 三主题经 `LangChangeListener`/`ThemeChangeListener` 实时适配（源码实现，实机切换未点测）✅。
+- **窗口自适应（§3.6）**：`Responsive.bind` 显式绑定于录入页与图表滚动页；其余页保持设计稿固定 `BorderPane`（V18 §5.6.4 已记录，设计稿未强制多栏重排）✅ 部分达标。
+- **首页搜索 / 图表导出 / 字体·存储路径设置（§3.6）**：`HistoryView` 导出图表、`SettingsView` 字号/存储路径在 V17 已落地（见 V17 章节）；`BmiFloatingCard` 与导出功能代码存在，实机点击未跑。标记为「代码走查达标、实机待测」。
+
+## 4. 编译与脚本合规校验（✅ 应用层达标）
+- **`bash build.sh` 等价全量编译（隔离抽取本提交树，JDK17 + OpenJFX21）**：**`JAVAC_EXIT=0`，应用层 0 错误（65 文件）** ✅。错误计数：`grep 错误: = 0`。`build.sh` 本身编译 `i18n + model + model.ai + model.db + controller + view + BmiApplication`（不含 `src/com/bmi/test`、`src/test`、`smoke`），与本次 0 错误结论一致。
+- **`run.sh` 语法（§4.2）**：`bash -n` ✅；`dash -n` ✅（数组语法 `CMD=("$JAVA" …)` 已在父提交改为兼容写法，**V19 的 `dash -n` 失败已修复**）。⚠️ **CRLF 换行符 = 17 处**（V19 为 23 处，已减少但未清零）❌ 一般项（纯 dash/sh 环境需注意，bash 可跑）。
+- **`BmiCategory` 类缺失（§4.3）**：检索 `model` 包无 `BmiCategory` 类；分类逻辑内联于 `CalcUtil`/`BodyFatCalculator`，无独立类缺失报错 ✅。
+- ⚠️ **测试文件编译（非 build.sh 范围）**：`src/com/bmi/test/BodyFatEstimatorTest.java` 引用不存在的 `com.bmi.model.ai.BodyFatEstimator`（树中仅有 `BodyFatCalculator`）→ 该测试**无法编译**（若单独跑 junit 会失败）；`src/test/MainTest.java`、`smoke/NavSmoke.java`、`JdbcRecordDaoChainTest.java` 需 junit jar 方可编译（build.sh 不含）。均**不计入 build.sh 0 错误结论**，标记为一般项（R-test）。
+
+## 5. AI 模块变更审查（✅ 达标，无越权）
+- **model.ai 改动仅限授权 4 处时间类型转换修复**：`AiHealthClient.java`（L40 `SimpleDateFormat→DateTimeFormatter`、L313 `format(Timestamp)→format(LocalDateTime)`）+ `TestAiService.java`（L64 `Timestamp.valueOf→LocalDateTime.parse`）。**无包迁移、无文件增删、无缓存/日志逻辑改动** ✅（§5.1）。
+- **AiAnalysisView 完整实现（§5.2）**：`import com.bmi.controller.AiController`、`adviceArea` 调用 `AiController.getAdvice`、历史数据经 `recordCombo` 读取；全部文案 `I18nUtil.t("ai.*")`，无 i18n 空白、无 TODO 占位 ✅。
+- ⚠️ **`client/AiHealthClient.java` 为孤儿死代码**：该文件在父提交已存在、本提交未改、且全仓无任何引用（`com.bmi.client.AiHealthClient` 零 import）；应用实际用 `model/ai/AiHealthClient`（被 `AiController` 引用）。属历史冗余，建议后续删除，不阻塞合并（一般项 R-dead）。
+
+## 6. i18n 国际化规范校验（⚠️ 1 项违规）
+- **全量 key 完备性扫描**：提取应用层 136 个 `I18n.t/I18nUtil.t` 静态 key，比对 `ui_zh.properties` / `ui_en.properties`：
+  - ✅ `session.notLoggedIn` / `input.bmiRealtime` / `nav.ai` / `nav.photo` / `nav.report` / `page.todo` 及全部 `photo.*`（除下列 2 个）、`ai.*`、`grade.*`、`input.statusActive` 等均存在，无 `{xxx}` 原始标记残留。
+  - ❌ **`photo.empty`（PhotoView:151/184/200）、`photo.preview`（PhotoView:251）在双语属性文件均缺失** —— 渲染时将显示原始 key 或空串，违反 §6.1「属性文件完整包含所有页面引用 key」。🔴 **阻断项（按全局标准），修复成本极低（各文件补 1 行）**。
+- **硬编码中文（§6.2）**：应用 UI 层（`view`/`controller`/`util`）**无硬编码中文 Label/Button 文案** ✅。`model/ai/AiHealthClient` 与孤儿 `client/AiHealthClient` 含中文：AI prompt（`你是一位…健康顾问`，语言必需，合理）、注释、及 2 条 `AiConfigException` 消息（`API Key 不能为空`/`API URL 不能为空`）。AI 层异常消息非 UI 控件文案，属轻微偏差（V18 §5.6.5  precedents：注释/诊断/AI-prompt 中文可接受）；标记为一般项（R-zh）。
+
+## 7. `.md` 文档强制合规校验（✅ 基本达标）
+- **`ui_verification_report.md`**：作者已在提交内补 V16–V19；**本 V20 章节由本次校验追加**，含 Db 文件恢复、UI 页面新增、跳转修复、编译修复的文件与行号，格式与 V16/V18/V19 统一 ✅（§7.2）。
+- **`ui_lib_record.md`**：本提交未改 `lib/`，白名单版本清单（OpenJFX 21.0.11 / JUnit5 1.11.4）与仓库/文档一致；`mysql-connector-j` 本地 8.0.33 vs 文档 8.4.0、`sqlite-jdbc` 本地缺失为环境偏差（见 §1 R-env），文档本身无需改 ✅（§7.3）。
+- **`ui_design.md`**：设计稿 `measureTime` 仍写 `Timestamp`，与代码已统一 `LocalDateTime` 漂移（V18 §5.6.5 已标注，属文档侧待修订，非本提交引入）⚠️ 一般项（R-doc）。代码实现与文档需求无功能冲突、无漏实现 ✅（§7.1）。
+
+## 8. 交付输出与最终结论
+1. **变更文件清单**：35 文件（9 新增 + 26 修改 + 0 删除）；删除风险分级：无删除 → 无高危阻断 ✅。新增分级：DB 恢复 2（合规）/ 新页面 3 + 悬浮卡 1（合规）/ Mock+NavSmoke（合规）/ app-config（一般）。
+2. **目录结构合规报告**：冗余根 `db/` 已清、无残留、`model/db` 路径合规、基线文件零误删 ✅。
+3. **编译日志 / 脚本校验**：应用层 **0 错误（65 文件，JAVAC_EXIT=0）**；`build.sh` 等价 0 错误；`run.sh` `bash -n`/`dash -n` 均通过，但 **17 CRLF** 待清；全链路跳转自测由 `NavSmoke` 源码 + 代码走查覆盖（实机 GUI 因无显示设备未跑）。
+4. **md 文档差异**：本 V20 已追加；`ui_lib_record.md` 无需改；`ui_design.md` 类型漂移待修（非阻断）。
+5. **最终结论**：⚠️ **条件通过 —— 建议补 2 i18n key（`photo.empty`/`photo.preview`）后合并至 `main`**。V19 三大阻断（编译失败 / 误删 DbUtil·DbException / 接口断裂）**已全部修复**，DB 持久化、UI 双层兜底跳转、AI 模块授权范围内修复均达标。按全局「不合规即阻断」标准，当前因 `photo.empty`/`photo.preview` 缺失暂标记 1 项阻断，但为 4 行极低成本修复；修复后即完全满足合并条件。
+   - 修复清单（合并前建议完成）：
+     - **B1（阻断→极低成本）** `ui_zh.properties` / `ui_en.properties` 补 `photo.empty` / `photo.preview` 两 key（建议值：`photo.empty=暂无照片` / `photo.preview=照片预览`；en: `photo.empty=No photo` / `photo.preview=Photo preview`）。
+     - R-test（一般）`BodyFatEstimatorTest.java` 改引用 `BodyFatCalculator` 或删除该测试，使 junit 套件可编译。
+     - R-dead（一般）删除孤儿 `client/AiHealthClient.java`（或若需保留则接入使用）。
+     - R-CRLF（一般）`run.sh` 清剩余 17 处 CRLF（转 LF）。
+     - R-env（一般）本地 `lib/` 对齐文档：放 `sqlite-jdbc-3.47.1.0.jar`、统一 `mysql-connector-j` 至 8.4.0（或更新文档至 8.0.33）。
+     - R-zh（一般）`AiConfigException` 两条消息改 `I18n.t(...)`（非 UI 强约束，可延后）。
+     - R-doc（一般）`ui_design.md` 的 `measureTime` 类型由 `Timestamp` 修订为 `LocalDateTime`。
 - **未执行操作**：全程只读，未 `git commit/merge/push`，本地 `main` 与 UI 工作树未动。
 
