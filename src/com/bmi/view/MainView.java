@@ -64,6 +64,10 @@ public class MainView extends StackPane implements LangChangeListener, ThemeChan
     private HistoryView historyView;
     private SettingsView settingsView;
 
+    private AiAnalysisView aiAnalysisView;
+    private PhotoView photoView;
+    private ReportView reportView;
+
     public MainView(User user, UserController userController, RecordController recordController,
                     ChartController chartController, AiController aiController,
                     PhotoController photoController, ReportController reportController,
@@ -98,8 +102,7 @@ public class MainView extends StackPane implements LangChangeListener, ThemeChan
         String[] navKeys = {"nav.home", "nav.input", "nav.history", "nav.ai", "nav.photo", "nav.report", "nav.setting"};
         Runnable[] actions = {
                 this::showHome, this::showInput, this::showHistory,
-                () -> showPlaceholder("nav.ai"), () -> showPlaceholder("nav.photo"),
-                () -> showPlaceholder("nav.report"), this::showSettings};
+                this::showAi, this::showPhoto, this::showReport, this::showSettings};
 
         for (int i = 0; i < navKeys.length; i++) {
             Button b = new Button(I18nUtil.t(navKeys[i]));
@@ -196,8 +199,8 @@ public class MainView extends StackPane implements LangChangeListener, ThemeChan
         Button bPhoto = StyleFactory.warningFnButton("home.quick.photo");
         Button bAi = StyleFactory.dangerFnButton("home.quick.ai");
         bInput.setOnAction(e -> showInput());
-        bPhoto.setOnAction(e -> showPlaceholder("nav.photo"));
-        bAi.setOnAction(e -> showPlaceholder("nav.ai"));
+        bPhoto.setOnAction(e -> showPhoto());
+        bAi.setOnAction(e -> showAi());
         HBox actionBtns = new HBox(16, bInput, bPhoto, bAi);
         actionBtns.setAlignment(Pos.CENTER);
         HBox.setHgrow(bInput, Priority.ALWAYS);
@@ -332,14 +335,28 @@ public class MainView extends StackPane implements LangChangeListener, ThemeChan
         currentPage = "setting";
     }
 
-    private void showPlaceholder(String key) {
-        VBox box = new VBox(10);
-        box.setPadding(new Insets(24));
-        box.setStyle("-fx-background-color:" + ThemeConstant.DEFAULT_THEME.bg() + ";");
-        box.getChildren().addAll(new Label(I18nUtil.t(key)), new Label(I18nUtil.t("page.todo")));
-        root.setCenter(box);
-        setActiveNav(key);
-        currentPage = key;
+    private void showAi() {
+        if (aiAnalysisView != null) aiAnalysisView.dispose();
+        aiAnalysisView = new AiAnalysisView(aiController, user.getId());
+        root.setCenter(aiAnalysisView);
+        setActiveNav("nav.ai");
+        currentPage = "ai";
+    }
+
+    private void showPhoto() {
+        if (photoView != null) photoView.dispose();
+        photoView = new PhotoView(photoController, user.getId());
+        root.setCenter(photoView);
+        setActiveNav("nav.photo");
+        currentPage = "photo";
+    }
+
+    private void showReport() {
+        if (reportView != null) reportView.dispose();
+        reportView = new ReportView(reportController, user.getId());
+        root.setCenter(reportView);
+        setActiveNav("nav.report");
+        currentPage = "report";
     }
 
     private void onDataChanged() {
