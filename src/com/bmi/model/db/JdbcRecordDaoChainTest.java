@@ -20,8 +20,8 @@ import java.util.Objects;
 /**
  * JdbcRecordDao 完整链路测试（对齐用户要求：单条记录 insert → queryByUser → update 全扩展字段）。
  *
- * 运行前提（与 docs/db_design.md / docs/mysql_init.sql 一致）：
- *  1) MySQL 8.0+ 已执行 db/mysql_init.sql 建表（user / body_record，含 10 个扩展列）；
+ * 运行前提（与 docs/db_design.md / docs/mysql_schema.sql 一致）：
+ *  1) MySQL 8.0+ 已执行 docs/mysql_schema.sql 建表（user / body_record，含 10 个扩展列）；
  *  2) db-config.properties 已配置 db.url / db.user / db.password（指向该库，源码零硬编码）；
  *  3) 运行 classpath 含 mysql-connector-j-*.jar 与 junit-jupiter（lib/ 下）；
  *  4) 数据库可达。

@@ -1,8 +1,8 @@
 -- ============================================================
 -- BMI 系统建表脚本 · SQLite 方言（v1.1 含扩展字段）
 -- 首选数据库（plan.md 选型）：文件型、零配置、桌面端零服务。
--- 可直接在 SQLite 客户端 / JDBC（DbUtil.getConnection）中执行。
--- 与 db/mysql_init.sql 字段、约束一一对齐；仅方言差异：
+-- 可直接在 SQLite 客户端 / JDBC（JdbcUtil.getConnection）中执行。
+-- 与 docs/mysql_schema.sql 字段、约束一一对齐；仅方言差异：
 --   · 无 ENGINE / CHARSET / 行内 COMMENT（字段注释以 -- 行注体现）
 --   · 无 ON UPDATE（updated_at 由应用层在资料变更时显式刷新）
 --   · DATETIME 在 SQLite 无原生类型，按 TEXT/REAL 亲和存储，应用层用 Timestamp 转换
@@ -12,7 +12,7 @@
 --   仍以双引号包裹以保持与 MySQL 反引号的可移植一致性）。
 -- ============================================================
 
--- 开启外键约束（SQLite 默认关闭，每次新连接必须执行；建议写入 DbUtil.getConnection）
+-- 开启外键约束（SQLite 默认关闭，每次新连接必须执行；建议写入 JdbcUtil.getConnection）
 PRAGMA foreign_keys = ON;
 
 -- ---------------- 用户表 ----------------
@@ -34,7 +34,7 @@ CREATE TABLE IF NOT EXISTS body_record (
     measure_time  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, -- 测量时间（可录入历史时间）
     height        NUMERIC(5,2) NOT NULL,                -- 身高cm（区间 50-250）
     weight        NUMERIC(5,2) NOT NULL,                -- 体重kg（区间 10-300）
-    bmi           NUMERIC(4,1) NOT NULL,                -- BMI值，由 BmiCalculator 公式计算（FR-03）
+    bmi           NUMERIC(4,1) NOT NULL,                -- BMI值，由 CalcUtil 公式计算（FR-03）
     body_fat      NUMERIC(4,1) NOT NULL,                -- 体脂率%，由 Deurenberg 公式估算（FR-04）
     -- 扩展字段（v1.1，选填，可空；NULL 表示未录入，绝不写 0 值）
     waist_circum  NUMERIC(5,2),                         -- 腰围cm（扩展，选填 30-200）
