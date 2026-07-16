@@ -1,68 +1,97 @@
 package com.bmi.model.db;
 
-import com.bmi.model.BodyRecord;
-
 import java.sql.Timestamp;
 import java.util.List;
 
+import com.bmi.model.BodyRecord;
+
 /**
- * 身体记录数据访问接口（对应 db_design.md v1.1 的 body_record 表，含 10 个扩展列）。
- * 实现类按 db_design.md 的建表 SQL 落地 JDBC（idx_record_user_time / idx_record_user_id 加速查询）；
- * 生产实现为 {@link JdbcRecordDao}（MySQL JDBC，已取代联调演示版 InMemoryRecordDao）。
+ * 测量记录数据访问接口，定义 body_record 表的 CRUD 操作契约。
+ * <p>
+ * 命名遵循 CODEBUDDY.md §4.1：DAO 后缀为 {@code Dao}。
+ * 实现类：{@link JdbcRecordDao}（JDBC）。
  */
 public interface RecordDao {
 
     /**
-     * 插入一条测量记录（FR-05 保存）；插入后由实现回填自增主键到 record.id。
+     * 插入一条测量记录，并将自增主键回写到 record 对象。
+     *
+     * @param record 测量记录
+     * @return true 写入成功
      */
-    void insert(BodyRecord record);
+    boolean insert(BodyRecord record);
 
     /**
-     * 按用户 + 时间区间查询（start/end 为 null 表示不限定），按 measure_time 升序（FR-05/FR-06/FR-07）。
+     * 按用户 ID 和时间范围查询测量记录。
+     *
+     * @param userId 用户 ID
+     * @param start  起始时间（含），为 null 时不限
+     * @param end    结束时间（含），为 null 时不限
+     * @return 记录列表（按 measure_time DESC 排序）
      */
     List<BodyRecord> queryByUser(long userId, Timestamp start, Timestamp end);
 
     /**
-     * 按用户分页查询，按 id 倒序（最新在前），命中 idx_record_user_id（v1.1 分页）。
-     * @param page 页码（从 1 开始）
-     * @param size 每页条数
+     * 按用户 ID 分页查询（page, size 参数）。
+     *
+     * @param userId 用户 ID
+     * @param page   页码（从 1 开始）
+     * @param size   每页条数
+     * @return 分页结果（含当前页数据、总记录数、总页数）
      */
-    List<BodyRecord> queryByUserPage(long userId, int page, int size);
+    PageResult<BodyRecord> queryByUserPage(long userId, int page, int size);
 
     /**
-     * 按用户 + 时间区间分页查询，按 measure_time 倒序，命中 idx_record_user_time（v1.1 分页 + 时间筛选）。
+     * 按用户 ID 和时间范围分页查询。
+     *
+     * @param userId 用户 ID
+     * @param start  起始时间（含），为 null 时不限
+     * @param end    结束时间（含），为 null 时不限
+     * @param page   页码（从 1 开始）
+     * @param size   每页条数
+     * @return 分页结果（含当前页数据、总记录数、总页数）
      */
-    List<BodyRecord> queryByUserPage(long userId, Timestamp start, Timestamp end, int page, int size);
+    PageResult<BodyRecord> queryByUserPage(long userId, Timestamp start, Timestamp end, int page, int size);
 
     /**
-     * 按主键删除（FR-05 删除）。注：越权防护建议在 controller 层先校验归属再调用；
-     * 如需库内强约束可改用 deleteById(long id, long userId)。
+     * 按主键 + 用户 ID 删除记录（防越权）。
+     *
+     * @param id     记录 ID
+     * @param userId 所属用户 ID
+     * @return true 删除成功
      */
-    void deleteById(long id);
+    boolean deleteById(long id, long userId);
 
     /**
-     * 按 id 更新全部列（含扩展字段），限定 user_id 防越权（v1.1，支撑修改历史旧记录）。
-     * 扩展字段为 null 时写入 NULL。
+     * 更新一条记录的全部字段（含扩展字段），限定 user_id 防越权。
+     *
+     * @param record 待更新记录（必须含 id 和 userId）
+     * @return true 更新成功
      */
-    void update(BodyRecord record);
+    boolean update(BodyRecord record);
 
     /**
-     * 取某用户最新一条记录（AI 建议与图表起点）。
+     * 查询某用户最新一条记录。
+     *
+     * @param userId 用户 ID
+     * @return 最新记录，无记录时返回 null
      */
     BodyRecord findLatest(long userId);
 
     /**
-     * 取某用户最近 N 条记录（按测量时间倒序取 N 条，返回时翻转为时间升序），
-     * 用于 AI 历史趋势（P1-F4，避免请求体过大）。
+     * 查询某用户全部测量记录。
      *
-     * @param n 最大条数（建议 10）
-     * @return 时间升序的最新 N 条；不足 N 条则返回全部
+     * @param userId 用户 ID
+     * @return 记录列表
      */
-    List<BodyRecord> queryLatestN(long userId, int n);
+    List<BodyRecord> listAllRecords(long userId);
 
     /**
-     * 按主键精确查询单条记录（v1.1，支撑 PhotoController 绑定/解绑前的归属校验与路径读取）。
-     * 返回 null 表示不存在。
+     * 按主键 + 用户 ID 查询单条记录（防越权）。
+     *
+     * @param recordId 记录 ID
+     * @param userId   所属用户 ID
+     * @return 记录对象，未找到返回 null
      */
-    BodyRecord findById(long id);
+    BodyRecord findById(long recordId, long userId);
 }

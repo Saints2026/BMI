@@ -1,7 +1,5 @@
 package com.bmi.model.db;
 
-import com.bmi.model.BodyRecord;
-
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -10,390 +8,308 @@ import java.sql.Statement;
 import java.sql.Timestamp;
 import java.sql.Types;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 
+import com.bmi.model.BodyRecord;
+
 /**
- * 身体记录 DAO 的 MySQL JDBC 实现（对账 db_design.md v1.1 的 body_record 表，含 10 个扩展列）。
- *
- * 本类为生产实现，取代原 InMemoryRecordDao（联调演示版）。
- * 所有 SQL 标识符使用反引号包裹，对 MySQL 保留字（如 user 表）安全，且在 SQLite 下同样兼容。
- *
- * 设计要点：
- *  - 连接经 {@link DbUtil#getConnection()} 获取；每次调用独立获取并在 finally 关闭（无连接池，符合桌面端轻量定位）；
- *  - 扩展字段（腰围/臀围/颈围/腕围/血压/心率/内脏脂肪/疾病/照片）使用包装类型，null 时写入 SQL NULL（区分「未录入」与「0 值」）；
- *  - update / delete 均限定 user_id 防越权（FR-05 / AC-05）；
- *  - 异常统一抛 {@link DbException}（由 controller 捕获并转为 ui_design.md 一.4 中文弹窗）。
+ * JDBC 实现的测量记录数据访问对象。
  */
 public class JdbcRecordDao implements RecordDao {
 
-    /** SELECT 列清单（与 ResultSet 映射顺序一致）。 */
-    private static final String COLS =
-            "`id`, `user_id`, `measure_time`, `height`, `weight`, `bmi`, `body_fat`,"
-            + " `waist_circum`, `hip_circum`, `neck_circum`, `wrist_circum`,"
-            + " `systolic_bp`, `diastolic_bp`, `heart_rate`, `visceral_fat`,"
-            + " `diseases`, `photo_path`, `created_at`";
-
-    /** INSERT 列清单（不含自增 id 与默认 created_at）。 */
-    private static final String INSERT_COLS =
-            "(`user_id`, `measure_time`, `height`, `weight`, `bmi`, `body_fat`,"
-            + " `waist_circum`, `hip_circum`, `neck_circum`, `wrist_circum`,"
-            + " `systolic_bp`, `diastolic_bp`, `heart_rate`, `visceral_fat`,"
-            + " `diseases`, `photo_path`)";
+    private static final String SELECT_ALL =
+            "SELECT id, user_id, measure_time, height, weight, bmi, body_fat, "
+          + "waist_circum, hip_circum, neck_circum, wrist_circum, "
+          + "systolic_bp, diastolic_bp, heart_rate, visceral_fat, "
+          + "diseases, photo_path, created_at FROM body_record";
 
     @Override
-    public void insert(BodyRecord record) {
-        final String sql = "INSERT INTO `body_record` " + INSERT_COLS
-                + " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
+    public boolean insert(BodyRecord record) {
+        if (record == null) return false;
+        String sql = "INSERT INTO body_record (user_id, measure_time, height, weight, bmi, body_fat, "
+                   + "waist_circum, hip_circum, neck_circum, wrist_circum, "
+                   + "systolic_bp, diastolic_bp, heart_rate, visceral_fat, "
+                   + "diseases, photo_path, created_at) "
+                   + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
         Connection conn = null;
         PreparedStatement ps = null;
-        ResultSet keys = null;
+        ResultSet rs = null;
         try {
-            conn = DbUtil.getConnection();
+            conn = JdbcUtil.getConnection();
             ps = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS);
-
-            int i = 1;
-            ps.setLong(i++, record.getUserId());
-            ps.setTimestamp(i++, record.getMeasureTime() != null
-                    ? record.getMeasureTime() : new Timestamp(System.currentTimeMillis()));
-            ps.setDouble(i++, record.getHeight());
-            ps.setDouble(i++, record.getWeight());
-            ps.setDouble(i++, record.getBmi());
-            ps.setDouble(i++, record.getBodyFat());
-            setNullableDouble(ps, i++, record.getWaistCircum());
-            setNullableDouble(ps, i++, record.getHipCircum());
-            setNullableDouble(ps, i++, record.getNeckCircum());
-            setNullableDouble(ps, i++, record.getWristCircum());
-            setNullableInt(ps, i++, record.getSystolicBp());
-            setNullableInt(ps, i++, record.getDiastolicBp());
-            setNullableInt(ps, i++, record.getHeartRate());
-            setNullableInt(ps, i++, record.getVisceralFat());
-            setNullableString(ps, i++, record.getDiseases());
-            setNullableString(ps, i++, record.getPhotoPath());
-
-            ps.executeUpdate();
-            keys = ps.getGeneratedKeys();
-            if (keys.next()) {
-                record.setId(keys.getLong(1));
+            ps.setLong(1, record.getUserId());
+            ps.setTimestamp(2, record.getMeasureTime() != null
+                    ? Timestamp.valueOf(record.getMeasureTime()) : Timestamp.valueOf(java.time.LocalDateTime.now()));
+            ps.setDouble(3, record.getHeight());
+            ps.setDouble(4, record.getWeight());
+            ps.setDouble(5, record.getBmi());
+            ps.setDouble(6, record.getBodyFat());
+            setDoubleOrNull(ps, 7, record.getWaistCircum());
+            setDoubleOrNull(ps, 8, record.getHipCircum());
+            setDoubleOrNull(ps, 9, record.getNeckCircum());
+            setDoubleOrNull(ps, 10, record.getWristCircum());
+            setIntOrNull(ps, 11, record.getSystolicBp());
+            setIntOrNull(ps, 12, record.getDiastolicBp());
+            setIntOrNull(ps, 13, record.getHeartRate());
+            setIntOrNull(ps, 14, record.getVisceralFat());
+            if (record.getDiseases() != null) ps.setString(15, record.getDiseases());
+            else ps.setNull(15, Types.VARCHAR);
+            if (record.getPhotoPath() != null) ps.setString(16, record.getPhotoPath());
+            else ps.setNull(16, Types.VARCHAR);
+            ps.setTimestamp(17, record.getCreatedAt() != null
+                    ? Timestamp.valueOf(record.getCreatedAt()) : Timestamp.valueOf(java.time.LocalDateTime.now()));
+            int affected = ps.executeUpdate();
+            if (affected > 0) {
+                rs = ps.getGeneratedKeys();
+                if (rs.next()) record.setId(rs.getLong(1));
+                return true;
             }
         } catch (SQLException e) {
-            throw new DbException("插入身体记录失败：" + e.getMessage(), e);
+            throw new DataAccessException("Failed to insert body record for userId: " + record.getUserId(), e);
         } finally {
-            DbUtil.closeQuietly(keys, ps);
-            DbUtil.closeQuietly(conn);
+            JdbcUtil.close(conn, ps, rs);
         }
+        return false;
     }
 
     @Override
     public List<BodyRecord> queryByUser(long userId, Timestamp start, Timestamp end) {
-        // 升序，供折线图 / AI 趋势（FR-05 / FR-06 / FR-07）
-        StringBuilder sql = new StringBuilder("SELECT ").append(COLS)
-                .append(" FROM `body_record` WHERE `user_id` = ?");
-        if (start != null) {
-            sql.append(" AND `measure_time` >= ?");
-        }
-        if (end != null) {
-            sql.append(" AND `measure_time` <= ?");
-        }
-        sql.append(" ORDER BY `measure_time` ASC");
-
+        StringBuilder sql = new StringBuilder(SELECT_ALL);
+        buildWhereClause(sql, start, end);
         Connection conn = null;
         PreparedStatement ps = null;
         ResultSet rs = null;
         try {
-            conn = DbUtil.getConnection();
+            conn = JdbcUtil.getConnection();
             ps = conn.prepareStatement(sql.toString());
-            int i = 1;
-            ps.setLong(i++, userId);
-            if (start != null) {
-                ps.setTimestamp(i++, start);
-            }
-            if (end != null) {
-                ps.setTimestamp(i++, end);
-            }
+            ps.setLong(1, userId);
+            int idx = setTimeParams(ps, 2, start, end);
             rs = ps.executeQuery();
-            return mapList(rs);
+            List<BodyRecord> list = new ArrayList<>();
+            while (rs.next()) list.add(mapRecord(rs));
+            return list;
         } catch (SQLException e) {
-            throw new DbException("查询身体记录失败：" + e.getMessage(), e);
+            throw new DataAccessException("Failed to query records for userId: " + userId, e);
         } finally {
-            DbUtil.closeQuietly(rs, ps);
-            DbUtil.closeQuietly(conn);
+            JdbcUtil.close(conn, ps, rs);
         }
     }
 
     @Override
-    public List<BodyRecord> queryByUserPage(long userId, int page, int size) {
-        // 按 id 倒序（最新在前），命中索引 idx_record_user_id（v1.1 分页）
-        final String sql = "SELECT " + COLS + " FROM `body_record`"
-                + " WHERE `user_id` = ? ORDER BY `id` DESC LIMIT ? OFFSET ?";
-        return pageQuery(sql, userId, null, null, page, size);
+    public PageResult<BodyRecord> queryByUserPage(long userId, int page, int size) {
+        return queryByUserPage(userId, null, null, page, size);
     }
 
     @Override
-    public List<BodyRecord> queryByUserPage(long userId, Timestamp start, Timestamp end, int page, int size) {
-        // 带时间筛选，按测量时间倒序，命中索引 idx_record_user_time（v1.1 分页 + 时间筛选）
-        StringBuilder sql = new StringBuilder("SELECT ").append(COLS)
-                .append(" FROM `body_record` WHERE `user_id` = ?");
-        if (start != null) {
-            sql.append(" AND `measure_time` >= ?");
-        }
-        if (end != null) {
-            sql.append(" AND `measure_time` <= ?");
-        }
-        sql.append(" ORDER BY `measure_time` DESC LIMIT ? OFFSET ?");
-
+    public PageResult<BodyRecord> queryByUserPage(long userId, Timestamp start, Timestamp end, int page, int size) {
+        if (page < 1) page = 1;
+        if (size <= 0) size = 10;
+        int offset = (page - 1) * size;
+        long total = countByUser(userId, start, end);
+        StringBuilder sql = new StringBuilder(SELECT_ALL);
+        buildWhereClause(sql, start, end);
+        sql.append(" LIMIT ? OFFSET ?");
         Connection conn = null;
         PreparedStatement ps = null;
         ResultSet rs = null;
         try {
-            conn = DbUtil.getConnection();
+            conn = JdbcUtil.getConnection();
             ps = conn.prepareStatement(sql.toString());
-            int i = 1;
-            ps.setLong(i++, userId);
-            if (start != null) {
-                ps.setTimestamp(i++, start);
-            }
-            if (end != null) {
-                ps.setTimestamp(i++, end);
-            }
-            ps.setInt(i++, Math.max(1, size));
-            ps.setInt(i++, (Math.max(1, page) - 1) * Math.max(1, size));
+            ps.setLong(1, userId);
+            int idx = setTimeParams(ps, 2, start, end);
+            ps.setInt(idx++, size);
+            ps.setInt(idx, offset);
             rs = ps.executeQuery();
-            return mapList(rs);
+            List<BodyRecord> list = new ArrayList<>();
+            while (rs.next()) list.add(mapRecord(rs));
+            return new PageResult<>(list, total, page, size);
         } catch (SQLException e) {
-            throw new DbException("分页查询身体记录失败：" + e.getMessage(), e);
+            throw new DataAccessException("Failed to page query records for userId: " + userId, e);
         } finally {
-            DbUtil.closeQuietly(rs, ps);
-            DbUtil.closeQuietly(conn);
-        }
-    }
-
-    /** 分页查询通用封装（无时间筛选）。 */
-    private List<BodyRecord> pageQuery(String sql, long userId, Timestamp start, Timestamp end, int page, int size) {
-        Connection conn = null;
-        PreparedStatement ps = null;
-        ResultSet rs = null;
-        try {
-            conn = DbUtil.getConnection();
-            ps = conn.prepareStatement(sql);
-            int i = 1;
-            ps.setLong(i++, userId);
-            if (start != null) {
-                ps.setTimestamp(i++, start);
-            }
-            if (end != null) {
-                ps.setTimestamp(i++, end);
-            }
-            ps.setInt(i++, Math.max(1, size));
-            ps.setInt(i++, (Math.max(1, page) - 1) * Math.max(1, size));
-            rs = ps.executeQuery();
-            return mapList(rs);
-        } catch (SQLException e) {
-            throw new DbException("分页查询身体记录失败：" + e.getMessage(), e);
-        } finally {
-            DbUtil.closeQuietly(rs, ps);
-            DbUtil.closeQuietly(conn);
+            JdbcUtil.close(conn, ps, rs);
         }
     }
 
     @Override
-    public void deleteById(long id) {
-        final String sql = "DELETE FROM `body_record` WHERE `id` = ?";
+    public boolean deleteById(long id, long userId) {
+        String sql = "DELETE FROM body_record WHERE id = ? AND user_id = ?";
         Connection conn = null;
         PreparedStatement ps = null;
         try {
-            conn = DbUtil.getConnection();
+            conn = JdbcUtil.getConnection();
             ps = conn.prepareStatement(sql);
             ps.setLong(1, id);
-            ps.executeUpdate();
+            ps.setLong(2, userId);
+            return ps.executeUpdate() > 0;
         } catch (SQLException e) {
-            throw new DbException("删除身体记录失败：" + e.getMessage(), e);
+            throw new DataAccessException("Failed to delete record id: " + id + " for userId: " + userId, e);
         } finally {
-            DbUtil.closeQuietly(ps);
-            DbUtil.closeQuietly(conn);
+            JdbcUtil.close(conn, ps);
         }
     }
 
     @Override
-    public void update(BodyRecord record) {
-        // 限定 user_id 防越权（FR-05）；扩展字段为 null 时写入 SQL NULL
-        final String sql = "UPDATE `body_record` SET"
-                + " `measure_time`=?, `height`=?, `weight`=?, `bmi`=?, `body_fat`=?,"
-                + " `waist_circum`=?, `hip_circum`=?, `neck_circum`=?, `wrist_circum`=?,"
-                + " `systolic_bp`=?, `diastolic_bp`=?, `heart_rate`=?, `visceral_fat`=?,"
-                + " `diseases`=?, `photo_path`=?"
-                + " WHERE `id` = ? AND `user_id` = ?";
+    public boolean update(BodyRecord record) {
+        if (record == null) return false;
+        String sql = "UPDATE body_record SET height=?, weight=?, bmi=?, body_fat=?, "
+                   + "waist_circum=?, hip_circum=?, neck_circum=?, wrist_circum=?, "
+                   + "systolic_bp=?, diastolic_bp=?, heart_rate=?, visceral_fat=?, "
+                   + "diseases=?, photo_path=? WHERE id=? AND user_id=?";
         Connection conn = null;
         PreparedStatement ps = null;
         try {
-            conn = DbUtil.getConnection();
+            conn = JdbcUtil.getConnection();
             ps = conn.prepareStatement(sql);
-            int i = 1;
-            ps.setTimestamp(i++, record.getMeasureTime() != null
-                    ? record.getMeasureTime() : new Timestamp(System.currentTimeMillis()));
-            ps.setDouble(i++, record.getHeight());
-            ps.setDouble(i++, record.getWeight());
-            ps.setDouble(i++, record.getBmi());
-            ps.setDouble(i++, record.getBodyFat());
-            setNullableDouble(ps, i++, record.getWaistCircum());
-            setNullableDouble(ps, i++, record.getHipCircum());
-            setNullableDouble(ps, i++, record.getNeckCircum());
-            setNullableDouble(ps, i++, record.getWristCircum());
-            setNullableInt(ps, i++, record.getSystolicBp());
-            setNullableInt(ps, i++, record.getDiastolicBp());
-            setNullableInt(ps, i++, record.getHeartRate());
-            setNullableInt(ps, i++, record.getVisceralFat());
-            setNullableString(ps, i++, record.getDiseases());
-            setNullableString(ps, i++, record.getPhotoPath());
-            ps.setLong(i++, record.getId());
-            ps.setLong(i++, record.getUserId());
-            ps.executeUpdate();
+            ps.setDouble(1, record.getHeight());
+            ps.setDouble(2, record.getWeight());
+            ps.setDouble(3, record.getBmi());
+            ps.setDouble(4, record.getBodyFat());
+            setDoubleOrNull(ps, 5, record.getWaistCircum());
+            setDoubleOrNull(ps, 6, record.getHipCircum());
+            setDoubleOrNull(ps, 7, record.getNeckCircum());
+            setDoubleOrNull(ps, 8, record.getWristCircum());
+            setIntOrNull(ps, 9, record.getSystolicBp());
+            setIntOrNull(ps, 10, record.getDiastolicBp());
+            setIntOrNull(ps, 11, record.getHeartRate());
+            setIntOrNull(ps, 12, record.getVisceralFat());
+            if (record.getDiseases() != null) ps.setString(13, record.getDiseases());
+            else ps.setNull(13, Types.VARCHAR);
+            if (record.getPhotoPath() != null) ps.setString(14, record.getPhotoPath());
+            else ps.setNull(14, Types.VARCHAR);
+            ps.setLong(15, record.getId());
+            ps.setLong(16, record.getUserId());
+            return ps.executeUpdate() > 0;
         } catch (SQLException e) {
-            throw new DbException("更新身体记录失败：" + e.getMessage(), e);
+            throw new DataAccessException("Failed to update record id: " + record.getId(), e);
         } finally {
-            DbUtil.closeQuietly(ps);
-            DbUtil.closeQuietly(conn);
+            JdbcUtil.close(conn, ps);
         }
     }
 
     @Override
     public BodyRecord findLatest(long userId) {
-        final String sql = "SELECT " + COLS + " FROM `body_record`"
-                + " WHERE `user_id` = ? ORDER BY `measure_time` DESC LIMIT 1";
+        String sql = SELECT_ALL + " WHERE user_id = ? ORDER BY measure_time DESC LIMIT 1";
         Connection conn = null;
         PreparedStatement ps = null;
         ResultSet rs = null;
         try {
-            conn = DbUtil.getConnection();
+            conn = JdbcUtil.getConnection();
             ps = conn.prepareStatement(sql);
             ps.setLong(1, userId);
             rs = ps.executeQuery();
-            if (rs.next()) {
-                return mapOne(rs);
-            }
-            return null;
+            if (rs.next()) return mapRecord(rs);
         } catch (SQLException e) {
-            throw new DbException("查询最新记录失败：" + e.getMessage(), e);
+            throw new DataAccessException("Failed to find latest record for userId: " + userId, e);
         } finally {
-            DbUtil.closeQuietly(rs, ps);
-            DbUtil.closeQuietly(conn);
+            JdbcUtil.close(conn, ps, rs);
         }
+        return null;
     }
 
     @Override
-    public List<BodyRecord> queryLatestN(long userId, int n) {
-        // 按测量时间倒序取最近 N 条（命中 idx_record_user_time），再翻转为时间升序供趋势展示（P1-F4）
-        final String sql = "SELECT " + COLS + " FROM `body_record`"
-                + " WHERE `user_id` = ? ORDER BY `measure_time` DESC LIMIT ?";
+    public List<BodyRecord> listAllRecords(long userId) {
+        return queryByUser(userId, null, null);
+    }
+
+    @Override
+    public BodyRecord findById(long recordId, long userId) {
+        String sql = SELECT_ALL + " WHERE id = ? AND user_id = ?";
         Connection conn = null;
         PreparedStatement ps = null;
         ResultSet rs = null;
         try {
-            conn = DbUtil.getConnection();
+            conn = JdbcUtil.getConnection();
             ps = conn.prepareStatement(sql);
+            ps.setLong(1, recordId);
+            ps.setLong(2, userId);
+            rs = ps.executeQuery();
+            if (rs.next()) return mapRecord(rs);
+        } catch (SQLException e) {
+            throw new DataAccessException("Failed to get record by id: " + recordId, e);
+        } finally {
+            JdbcUtil.close(conn, ps, rs);
+        }
+        return null;
+    }
+
+    private long countByUser(long userId, Timestamp start, Timestamp end) {
+        StringBuilder sql = new StringBuilder("SELECT COUNT(*) FROM body_record WHERE user_id = ?");
+        if (start != null) sql.append(" AND measure_time >= ?");
+        if (end != null) sql.append(" AND measure_time <= ?");
+        Connection conn = null;
+        PreparedStatement ps = null;
+        ResultSet rs = null;
+        try {
+            conn = JdbcUtil.getConnection();
+            ps = conn.prepareStatement(sql.toString());
             ps.setLong(1, userId);
-            ps.setInt(2, Math.max(1, n));
+            int idx = 2;
+            if (start != null) ps.setTimestamp(idx++, start);
+            if (end != null) ps.setTimestamp(idx++, end);
             rs = ps.executeQuery();
-            List<BodyRecord> desc = mapList(rs);   // 最新在前
-            Collections.reverse(desc);             // 翻转为时间升序
-            return desc;
+            if (rs.next()) return rs.getLong(1);
         } catch (SQLException e) {
-            throw new DbException("查询最近记录失败：" + e.getMessage(), e);
+            throw new DataAccessException("Failed to count records for userId: " + userId, e);
         } finally {
-            DbUtil.closeQuietly(rs, ps);
-            DbUtil.closeQuietly(conn);
+            JdbcUtil.close(conn, ps, rs);
         }
+        return 0;
     }
 
-    @Override
-    public BodyRecord findById(long id) {
-        final String sql = "SELECT " + COLS + " FROM `body_record` WHERE `id` = ? LIMIT 1";
-        Connection conn = null;
-        PreparedStatement ps = null;
-        ResultSet rs = null;
-        try {
-            conn = DbUtil.getConnection();
-            ps = conn.prepareStatement(sql);
-            ps.setLong(1, id);
-            rs = ps.executeQuery();
-            if (rs.next()) {
-                return mapOne(rs);
-            }
-            return null;
-        } catch (SQLException e) {
-            throw new DbException("按主键查询记录失败：" + e.getMessage(), e);
-        } finally {
-            DbUtil.closeQuietly(rs, ps);
-            DbUtil.closeQuietly(conn);
-        }
+    private String buildWhereClause(StringBuilder sql, Timestamp start, Timestamp end) {
+        sql.append(" WHERE user_id = ?");
+        if (start != null) sql.append(" AND measure_time >= ?");
+        if (end != null) sql.append(" AND measure_time <= ?");
+        sql.append(" ORDER BY measure_time DESC");
+        return sql.toString();
     }
 
-    // ============ 映射与辅助 ============
-
-    private List<BodyRecord> mapList(ResultSet rs) throws SQLException {
-        List<BodyRecord> list = new ArrayList<>();
-        while (rs.next()) {
-            list.add(mapOne(rs));
-        }
-        return list;
+    private int setTimeParams(PreparedStatement ps, int index, Timestamp start, Timestamp end) throws SQLException {
+        if (start != null) ps.setTimestamp(index++, start);
+        if (end != null) ps.setTimestamp(index++, end);
+        return index;
     }
 
-    private BodyRecord mapOne(ResultSet rs) throws SQLException {
+    private BodyRecord mapRecord(ResultSet rs) throws SQLException {
         BodyRecord r = new BodyRecord();
         r.setId(rs.getLong("id"));
         r.setUserId(rs.getLong("user_id"));
-        r.setMeasureTime(rs.getTimestamp("measure_time"));
+        Timestamp mt = rs.getTimestamp("measure_time");
+        if (mt != null) r.setMeasureTime(mt.toLocalDateTime());
         r.setHeight(rs.getDouble("height"));
         r.setWeight(rs.getDouble("weight"));
         r.setBmi(rs.getDouble("bmi"));
         r.setBodyFat(rs.getDouble("body_fat"));
-        r.setWaistCircum(getDoubleOrNull(rs, "waist_circum"));
-        r.setHipCircum(getDoubleOrNull(rs, "hip_circum"));
-        r.setNeckCircum(getDoubleOrNull(rs, "neck_circum"));
-        r.setWristCircum(getDoubleOrNull(rs, "wrist_circum"));
-        r.setSystolicBp(getIntOrNull(rs, "systolic_bp"));
-        r.setDiastolicBp(getIntOrNull(rs, "diastolic_bp"));
-        r.setHeartRate(getIntOrNull(rs, "heart_rate"));
-        r.setVisceralFat(getIntOrNull(rs, "visceral_fat"));
+        double wc = rs.getDouble("waist_circum");
+        if (!rs.wasNull()) r.setWaistCircum(wc);
+        double hc = rs.getDouble("hip_circum");
+        if (!rs.wasNull()) r.setHipCircum(hc);
+        double nc = rs.getDouble("neck_circum");
+        if (!rs.wasNull()) r.setNeckCircum(nc);
+        double wrc = rs.getDouble("wrist_circum");
+        if (!rs.wasNull()) r.setWristCircum(wrc);
+        int sbp = rs.getInt("systolic_bp");
+        if (!rs.wasNull()) r.setSystolicBp(sbp);
+        int dbp = rs.getInt("diastolic_bp");
+        if (!rs.wasNull()) r.setDiastolicBp(dbp);
+        int hr = rs.getInt("heart_rate");
+        if (!rs.wasNull()) r.setHeartRate(hr);
+        int vf = rs.getInt("visceral_fat");
+        if (!rs.wasNull()) r.setVisceralFat(vf);
         r.setDiseases(rs.getString("diseases"));
         r.setPhotoPath(rs.getString("photo_path"));
-        r.setCreatedAt(rs.getTimestamp("created_at"));
+        Timestamp ca = rs.getTimestamp("created_at");
+        if (ca != null) r.setCreatedAt(ca.toLocalDateTime());
         return r;
     }
 
-    /** 包装类型 Double：SQL NULL → null；否则返回实际值。 */
-    private Double getDoubleOrNull(ResultSet rs, String col) throws SQLException {
-        double v = rs.getDouble(col);
-        return rs.wasNull() ? null : v;
+    private void setDoubleOrNull(PreparedStatement ps, int index, Double value) throws SQLException {
+        if (value != null) ps.setDouble(index, value);
+        else ps.setNull(index, Types.DOUBLE);
     }
 
-    /** 包装类型 Integer：SQL NULL → null；否则返回实际值。 */
-    private Integer getIntOrNull(ResultSet rs, String col) throws SQLException {
-        int v = rs.getInt(col);
-        return rs.wasNull() ? null : v;
-    }
-
-    private void setNullableDouble(PreparedStatement ps, int idx, Double v) throws SQLException {
-        if (v == null) {
-            ps.setNull(idx, Types.DOUBLE);
-        } else {
-            ps.setDouble(idx, v);
-        }
-    }
-
-    private void setNullableInt(PreparedStatement ps, int idx, Integer v) throws SQLException {
-        if (v == null) {
-            ps.setNull(idx, Types.INTEGER);
-        } else {
-            ps.setInt(idx, v);
-        }
-    }
-
-    private void setNullableString(PreparedStatement ps, int idx, String v) throws SQLException {
-        if (v == null) {
-            ps.setNull(idx, Types.VARCHAR);
-        } else {
-            ps.setString(idx, v);
-        }
+    private void setIntOrNull(PreparedStatement ps, int index, Integer value) throws SQLException {
+        if (value != null) ps.setInt(index, value);
+        else ps.setNull(index, Types.INTEGER);
     }
 }

@@ -52,8 +52,8 @@
    ┌────────────────────┐        ┌────────────────────┐
    │   model.db 层      │        │   model.ai 层      │
    │ UserDao/RecordDao  │        │ AiHealthClient     │
-   │ User/Record 实体   │        │ Bmi/BodyFatCalc    │
-   │ DbUtil(JDBC)       │        │ HttpURLConnection  │
+   │ User/Record 实体   │        │ CalcUtil           │
+   │ JdbcUtil(JDBC)     │        │ HttpURLConnection  │
    └─────────┬──────────┘        └─────────┬──────────┘
              ▼                             ▼
         ┌─────────┐                  ┌──────────┐
@@ -66,7 +66,7 @@
 ### 3.2 端到端调用时序示例（录入身高体重 → 计算 BMI → 体脂 → 落库 → 刷新图表）
 
 ```
-用户        RecordInputPanel   RecordController   BmiCalculator   BodyFatCalculator   RecordDao      ChartController   ChartPanel
+用户        RecordInputPanel   RecordController   CalcUtil   RecordDao      ChartController   ChartPanel
  │              │                    │                │                │                  │               │                │
  │─输入175cm/70kg/30岁/男─▶│            │                │                │                  │               │                │
  │              │─onSave(height,weight,age,gender)─▶│                │                │                  │               │                │
@@ -139,8 +139,8 @@
 | `RecordDao` | `long insert(Record record)` | 插入测量记录，返回自增主键 |
 | `RecordDao` | `List<Record> queryByUser(long userId, Date start, Date end)` | 按用户+时间区间升序查询 |
 | `RecordDao` | `int deleteById(long userId, long recordId)` | 按主键删除（限定 user_id 防越权） |
-| `DbUtil` | `static Connection getConnection()` | 读取 `db-config.properties` 建立 JDBC 连接 |
-| `DbUtil` | `static void close(Connection/Statement/ResultSet)` | 资源释放 |
+| `JdbcUtil` | `static Connection getConnection()` | 读取 `db-config.properties` 建立 JDBC 连接 |
+| `JdbcUtil` | `static void close(Connection/Statement/ResultSet)` | 资源释放 |
 
 **实体 `User`**（字段：`long id; String username; String passwordHash; String salt; Date createdAt;`）
 **实体 `Record`**（字段：`long id; long userId; Date measureTime; double height; double weight; double bmi; double bodyFat; Date createdAt;`）
@@ -149,13 +149,14 @@
 
 | 类名 | 方法签名 | 说明 |
 |------|----------|------|
-| `BmiCalculator` | `double calcBmi(double heightCm, double weightKg)` | BMI=weight/(h/100)²，保留 1 位小数 |
-| `BmiCalculator` | `String classify(double bmi)` | 中国标准分级：偏瘦/正常/超重/肥胖 |
-| `BodyFatCalculator` | `double predictBodyFat(double bmi, int age, int gender)` | Deurenberg 公式，保留 1 位小数 |
+| `CalcUtil` | `double calcBmi(double weightKg, double heightCm)` | BMI=weight/(h/100)²，保留 1 位小数 |
+| `CalcUtil` | `BmiCategory classifyBmi(double bmi)` | 中国标准分级，返回枚举（UNDERWEIGHT/NORMAL/OVERWEIGHT/OBESE） |
+| `CalcUtil` | `double predictBodyFat(double bmi, int age, int gender)` | Deurenberg 公式，保留 1 位小数 |
+| `BmiCategory` | 枚举（`com.bmi.model` 包） | BMI 分级枚举，view 层 i18n 据此查表获取中文文案 |
 | `AiHealthClient` | `String requestAdvice(AiRequest req)` | 组装 JSON→HttpURLConnection 调用→解析→降级 |
 | `AiHealthClient` | `AiRequest buildRequest(User u, Record latest, List<Record> history)` | 构造请求（system/userMetrics/historySummary/modelParams） |
 
-> `BmiCalculator` / `BodyFatCalculator` 为纯业务类（无 DB/AI 依赖），可由 JUnit 直接单测，满足「db 层不含业务计算、计算归属 model 业务方法」铁律。
+> `CalcUtil` 为纯业务类（无 DB/AI 依赖），归属 `com.bmi.model.ai` 包，可由 JUnit 直接单测，满足「db 层不含业务计算、计算归属 model 业务方法」铁律。`BmiCategory` 枚举位于 `com.bmi.model` 包，不在业务层硬编码中文分级文案。
 
 ---
 
@@ -273,7 +274,7 @@ CREATE INDEX idx_record_user_time ON t_record(user_id, measure_time);
 |------|------|------|--------------|
 | 图表 | **Swing 自绘**（`JPanel` + `Graphics2D`） | 零额外依赖、完全在白名单内、避免引入第三方 jar；数据点规模小（个人记录），自绘足够；满足 FR-06 切换/重绘 <500ms | ✅（宪章允许二选一） |
 | 数据库 | **SQLite** | 文件型零配置、桌面端无需起服务、JDBC 驱动 jar 入 `lib/` 即可；满足 FR-05 查询 <1s；符合「JDBC + MySQL 或 SQLite」白名单 | ✅ |
-| 业务计算 | 纯 Java 类 `BmiCalculator`/`BodyFatCalculator` | 无外部库，公式确定性高，易单测 | ✅ |
+| 业务计算 | 纯 Java 类 `CalcUtil`（`com.bmi.model.ai`） | 无外部库，公式确定性高，易单测 | ✅ |
 | AI 调用 | 原生 `HttpURLConnection` | 宪章指定，无 OkHttp 等额外依赖 | ✅ |
 | 测试 | JUnit（jar 入 `lib/`） | 宪章指定 | ✅ |
 | 依赖管理 | 手动 jar 入 `lib/` | 无 Maven/Gradle | ✅ |
@@ -288,8 +289,8 @@ CREATE INDEX idx_record_user_time ON t_record(user_id, measure_time);
 |------|-------------|-------------|
 | FR-01 登录注册 | `LoginView`、`UserController`、`UserDao`、`User` | `t_user` |
 | FR-02 身高体重录入 | `RecordInputPanel`、`RecordController` | — |
-| FR-03 BMI 计算分级 | `BmiCalculator`、`RecordController` | `t_record.bmi` |
-| FR-04 体脂预测 | `BodyFatCalculator`、`RecordController` | `t_record.body_fat` |
+| FR-03 BMI 计算分级 | `CalcUtil`、`RecordController` | `t_record.bmi` |
+| FR-04 体脂预测 | `CalcUtil`、`RecordController` | `t_record.body_fat` |
 | FR-05 历史记录管理 | `HistoryPanel`、`RecordController`、`RecordDao`、`Record` | `t_record` |
 | FR-06 动态折线图 | `ChartPanel`、`ChartController` | 查询 `t_record` |
 | FR-07 AI 健康建议 | `AiController`、`AiHealthClient` | 外部大模型接口 |

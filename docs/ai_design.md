@@ -22,7 +22,7 @@
 
 ## 2. 接口定位与调用位置
 
-- **封装归属**：`com.bmi.model.ai.AiHealthClient`（model.ai 层），对上层仅暴露「建议文本获取能力」，不暴露 HTTP 细节。
+- **封装归属**：`com.bmi.model.ai.AiService`（model.ai 层），对上层仅暴露「建议文本获取能力」，不暴露 HTTP 细节。
 - **编排归属**：`com.bmi.controller.AiController.getAdvice(long userId)`，负责汇总最新指标 + 历史摘要、构造 `AiRequest`、调用 Client、把文本回传视图。
 - **调用方向**（呼应宪章第 5 节分层铁律 `view → controller → model`，model 绝不反向依赖 view/controller）：
   ```
@@ -31,10 +31,10 @@
         ▼
   AiController.getAdvice(userId)            ← 控制层编排
         │  1) RecordController/RecordDao 取 latest + history
-        │  2) AiHealthClient.buildRequest(user, latest, history)
-        │  3) AiHealthClient.requestAdvice(req)  → 内部 send()
-        ▼
-  AiHealthClient (model.ai)  ──HttpURLConnection──▶  外部大模型接口
+        │  2) AiService.buildRequest(user, latest, history)
+        │  3) AiService.requestAdvice(req)   → 内部 send()
+▼
+  AiService (model.ai)  ──HttpURLConnection──▶  外部大模型接口
         │ 返回 AiHealthResult / 降级文本
         ▼
   AiController  →  AiAdvicePanel.showAdvice(text)
@@ -188,9 +188,9 @@ public AiHealthResult parseResponse(String jsonBody);
 }
 ```
 
-### 4.4 建议文本如何映射到 UI（spec FR-07 / ChartPanel 体系）
+### 4.4 建议文本如何映射到 UI（spec FR-07 / JavaFX 体系）
 
-- 视图层建议展示区（如 `AiAdvicePanel.showAdvice(String text)`）直接渲染 `AiHealthResult.adviceText` 全文本；
+- 视图层建议展示区（如 `MainView.showAdvice(String text)`）直接渲染 `AiHealthResult.adviceText` 全文本；
 - 若需分栏精致展示，可分别用 `dietAdvice/exerciseAdvice/healthAdvice` 填充「饮食 / 运动 / 健康」三个子面板；
 - AC-07 要求「返回文本非空且含饮食/运动/健康分段」，`parseResponse` 在解析后做非空与三段包含校验，不达标则按服务器报错降级处理。
 
@@ -223,7 +223,7 @@ public AiHealthResult parseResponse(String jsonBody);
 
 ### 5.3 `AiHealthClient` 与 `AiController` 异常职责边界
 
-- **`AiHealthClient`（model.ai 层）—— 捕获 + 转换 + 降级**
+- **`AiService`（model.ai 层）—— 捕获 + 转换 + 降级**
   - 在 `send()` 内 try-catch 全部传输层异常，转换为 `AiHealthResult`（成功或降级），**不向 Controller 抛出传输类异常**；
   - 仅当 `ai-key.properties`/`api.key` 缺失时抛 `AiConfigException`（属配置错误，需上层提示管理员）；
   - 负责重试决策（仅 TIMEOUT / 5xx 重试 1 次）。
@@ -277,7 +277,7 @@ public AiHealthResult parseResponse(String jsonBody);
 
 | 类 / 异常 | 包路径 | 角色 |
 |-----------|--------|------|
-| `AiHealthClient` | `com.bmi.model.ai` | AI 封装 `XxxClient`（宪章命名） |
+| `AiService` | `com.bmi.model.ai` | AI 封装 `XxxService`（宪章命名） |
 | `AiRequest` | `com.bmi.model.ai` | 请求 DTO（实体，大驼峰无后缀） |
 | `AiHealthResult` | `com.bmi.model.ai` | 响应/结果实体 |
 | `AiException` | `com.bmi.model.ai` | 自定义异常基类 `extends Exception` |
@@ -289,14 +289,14 @@ public AiHealthResult parseResponse(String jsonBody);
 ```java
 package com.bmi.model.ai;
 
-public class AiHealthClient {
+public class AiService {
 
     static final int CONNECT_TIMEOUT_MS = 10000;
     static final int READ_TIMEOUT_MS    = 10000;
     static final int MAX_RETRY          = 1;
 
     // 构造请求 DTO（对齐 plan.md §4.4）
-    public AiRequest buildRequest(User u, Record latest, List<Record> history);
+    public AiRequest buildRequest(User u, BodyRecord latest, List<BodyRecord> history);
 
     // 对外主入口（对齐 plan.md §4.4，返回建议文本或降级文案）
     public String requestAdvice(AiRequest req);

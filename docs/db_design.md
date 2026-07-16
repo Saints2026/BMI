@@ -10,7 +10,7 @@
 | 编写角色 | **DBA Agent（数据库管理员）** |
 | 适用范围 | `spec.md` FR-01（用户登录注册）、FR-05（历史记录保存/查询/删除）；并支撑 FR-03（BMI）、FR-04（体脂）、FR-06（图表）数据落地 |
 
-> 本设计严格遵循 `CODEBUDDY.md` 技术栈边界：仅使用 **Java 8+ JDBC + SQLite（首选）/ MySQL（兼容）**，不引入任何 ORM（MyBatis/Hibernate）或白名单外数据库技术。配置文件经 `DbUtil` 从 `db-config.properties` 读取，源码零硬编码。
+> 本设计严格遵循 `CODEBUDDY.md` 技术栈边界：仅使用 **Java 8+ JDBC + SQLite（首选）/ MySQL（兼容）**，不引入任何 ORM（MyBatis/Hibernate）或白名单外数据库技术。配置文件经 `JdbcUtil` 从 `db-config.properties` 读取，源码零硬编码。
 
 ---
 
@@ -82,7 +82,9 @@ erDiagram
 
 ## 3. 表结构设计（逐表）
 
-> 字段命名统一「小写下划线」风格（宪章第 4 节）。`bmi` 由 `BmiCalculator.calcBmi` 计算（FR-03），`body_fat` 由 `BodyFatCalculator.predictBodyFat`（Deurenberg 公式）估算（FR-04），二者均**不**在数据库内计算，仅持久化结果，符合「db 层不含业务计算」铁律。
+> 字段命名统一「小写下划线」风格（宪章第 4 节）。`bmi` 由 `CalcUtil.calcBmi` 计算（FR-03），`body_fat` 由 `CalcUtil.predictBodyFat`（Deurenberg 公式）估算（FR-04），二者均**不**在数据库内计算，仅持久化结果，符合「db 层不含业务计算」铁律。
+>
+> **BMI 分级**：`CalcUtil.classifyBmi` 返回 `BmiCategory` 枚举（`UNDERWEIGHT` / `NORMAL` / `OVERWEIGHT` / `OBESE`），位于 `com.bmi.model` 包。数据库不存储分级文本，仅持久化 `bmi` 数值；中文分级文案由 view 层 i18n 根据枚举值查表获取。`CalcUtil` 归属 `com.bmi.model.ai` 包，与 `BmiCategory` 跨包引用。
 
 ### 3.1 `user` 用户表
 
@@ -107,8 +109,8 @@ erDiagram
 | `measure_time` | DATETIME | — | — | ✅ | — | CURRENT_TIMESTAMP | 测量时间 | 默认当前时间；可录入历史时间（FR-02 可选 `measureTime`） |
 | `height` | NUMERIC(5,2) | — | — | ✅ | — | — | 身高（cm） | CHECK `height BETWEEN 50 AND 250`（AC-02 区间） |
 | `weight` | NUMERIC(5,2) | — | — | ✅ | — | — | 体重（kg） | CHECK `weight BETWEEN 10 AND 300`（AC-02 区间） |
-| `bmi` | NUMERIC(4,1) | — | — | ✅ | — | — | BMI 值 | 由 `BmiCalculator.calcBmi` 计算，保留 1 位小数（FR-03，公式 `weight/(h/100)²`）；CHECK `bmi > 0` |
-| `body_fat` | NUMERIC(4,1) | — | — | ✅ | — | — | 体脂率（%） | 由 `BodyFatCalculator.predictBodyFat`（Deurenberg 公式：1.2×BMI+0.23×age−10.8×gender−5.4）估算，保留 1 位小数（FR-04）；CHECK `body_fat BETWEEN 0 AND 100` |
+| `bmi` | NUMERIC(4,1) | — | — | ✅ | — | — | BMI 值 | 由 `CalcUtil.calcBmi` 计算，保留 1 位小数（FR-03，公式 `weight/(h/100)²`）；CHECK `bmi > 0` |
+| `body_fat` | NUMERIC(4,1) | — | — | ✅ | — | — | 体脂率（%） | 由 `CalcUtil.predictBodyFat`（Deurenberg 公式：1.2×BMI+0.23×age−10.8×gender−5.4）估算，保留 1 位小数（FR-04）；CHECK `body_fat BETWEEN 0 AND 100` |
 | `created_at` | DATETIME | — | — | ✅ | — | CURRENT_TIMESTAMP | 入库时间 | 默认当前时间；与 `measure_time` 分离，记录落库时刻 |
 
 > 索引设计：在 `(user_id, measure_time)` 上建**联合索引**，加速「按用户 + 时间区间」升序查询与趋势渲染（AC-05 查询 <1s），对应 `RecordDao.queryByUser(userId, start, end)`。
@@ -168,7 +170,7 @@ CREATE INDEX IF NOT EXISTS idx_record_user_time ON body_record(user_id, measure_
 
 **SQLite 方言注意点**：
 - 自增使用 `INTEGER PRIMARY KEY AUTOINCREMENT`（`INTEGER PRIMARY KEY` 已隐含 rowid 自增，`AUTOINCREMENT` 保证单调递增不回收）。
-- 外键**默认关闭**，必须 `PRAGMA foreign_keys = ON;` 且每次新连接都执行（写入 `DbUtil.getConnection()` 中）。
+- 外键**默认关闭**，必须 `PRAGMA foreign_keys = ON;` 且每次新连接都执行（写入 `JdbcUtil.getConnection()` 中）。
 - 类型亲和：`INTEGER` / `TEXT` / `NUMERIC` / `DATETIME`（SQLite 无原生 DATETIME，按 TEXT/REAL 亲和存储，应用层用 `Timestamp` 转换）。
 - SQLite 不支持 `COMMENT` 语法，字段中文注释见本文「第 5 节 字段注释汇总表」。
 - `user` 在 SQLite 中**非保留字**，但建议保留反引号/双引号以保持与 MySQL 的可移植一致性。
@@ -229,7 +231,7 @@ ALTER TABLE `body_record`
     MODIFY COLUMN `measure_time` DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '测量时间',
     MODIFY COLUMN `height`       DECIMAL(5,2) NOT NULL COMMENT '身高cm（区间50-250）',
     MODIFY COLUMN `weight`       DECIMAL(5,2) NOT NULL COMMENT '体重kg（区间10-300）',
-    MODIFY COLUMN `bmi`          DECIMAL(4,1) NOT NULL COMMENT 'BMI值，由BmiCalculator公式计算（FR-03）',
+    MODIFY COLUMN `bmi`          DECIMAL(4,1) NOT NULL COMMENT 'BMI值，由CalcUtil公式计算（FR-03）',
     MODIFY COLUMN `body_fat`     DECIMAL(4,1) NOT NULL COMMENT '体脂率%，由Deurenberg公式估算（FR-04）',
     MODIFY COLUMN `created_at`   DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '入库时间';
 ```
@@ -245,7 +247,7 @@ ALTER TABLE `body_record`
 ### 4.3 外键开启与索引补充语句（跨方言）
 
 ```sql
--- SQLite：每次新连接必须执行（建议写入 DbUtil.getConnection()）
+-- SQLite：每次新连接必须执行（建议写入 JdbcUtil.getConnection()）
 PRAGMA foreign_keys = ON;
 
 -- MySQL：默认开启，显式确认即可
@@ -256,9 +258,16 @@ PRAGMA foreign_keys = ON;
 -- CREATE INDEX IF NOT EXISTS idx_record_user_time ON body_record(user_id, measure_time);
 ```
 
----
+### 4.4 连接超时配置
 
-## 5. 字段注释汇总表（便于团队协作）
+`JdbcUtil`（`com.bmi.model.db` 包）已在 `getConnection()` 中应用超时常量，防止数据库不可达时线程长时间阻塞：
+
+| 常量 | 值 | 应用方式 | 生效范围 |
+|------|----|----------|----------|
+| `CONNECT_TIMEOUT_MS` | 5000（5 秒） | `DriverManager.setLoginTimeout(CONNECT_TIMEOUT_MS / 1000)` | MySQL + SQLite |
+| `READ_TIMEOUT_MS` | 10000（10 秒） | `conn.setNetworkTimeout(executor, READ_TIMEOUT_MS)` | 仅 MySQL（SQLite 驱动不支持，已 try-catch 跳过） |
+
+常量命名遵循 CODEBUDDY.md §4.2 全大写下划线规范。`setNetworkTimeout` 使用的 `Executor` 为静态 daemon 线程复用，避免每次连接创建线程池。
 
 | 表名 | 字段名 | 类型（SQLite / MySQL） | 中文注释 | 来源需求(FR) |
 |------|--------|------------------------|----------|--------------|
@@ -274,7 +283,7 @@ PRAGMA foreign_keys = ON;
 | `body_record` | `measure_time` | DATETIME | 测量时间（可录入历史时间） | FR-02 / FR-05 |
 | `body_record` | `height` | NUMERIC(5,2) / DECIMAL(5,2) | 身高 cm（区间 50–250） | FR-02 / FR-05 |
 | `body_record` | `weight` | NUMERIC(5,2) / DECIMAL(5,2) | 体重 kg（区间 10–300） | FR-02 / FR-05 |
-| `body_record` | `bmi` | NUMERIC(4,1) / DECIMAL(4,1) | BMI 值（由 BmiCalculator 公式计算，FR-03） | FR-03 / FR-05 |
+| `body_record` | `bmi` | NUMERIC(4,1) / DECIMAL(4,1) | BMI 值（由 CalcUtil 公式计算，FR-03） | FR-03 / FR-05 |
 | `body_record` | `body_fat` | NUMERIC(4,1) / DECIMAL(4,1) | 体脂率 %（Deurenberg 公式估算，FR-04） | FR-04 / FR-05 |
 | `body_record` | `created_at` | DATETIME | 入库时间 | FR-05 |
 
@@ -305,7 +314,7 @@ PRAGMA foreign_keys = ON;
 ### 6.3 敏感字段与配置处理
 
 - **`password`/密码**：数据库**仅存** `password_hash`（随机盐 + SHA-256 不可逆散列），**绝不保存明文**（spec 数据安全；AC-01）。校验在 `UserController.login` 中重新计算散列并比对，由 `UserDao.findByUsername` 取回盐与哈希。
-- **密钥与 DB 配置**：JDBC URL、用户名、密码等仅从 `db-config.properties` 读取（`DbUtil.getConnection()`）；AI Key 仅从 `ai-key.properties` 读取。**源码零硬编码**，两文件已 `gitignore`（宪章第 4/7 节、spec 第 6 节）。
+- **密钥与 DB 配置**：JDBC URL、用户名、密码等仅从 `db-config.properties` 读取（`JdbcUtil.getConnection()`）；AI Key 仅从 `ai-key.properties` 读取。**源码零硬编码**，两文件已 `gitignore`（宪章第 4/7 节、spec 第 6 节）。
 - **数据隔离**：所有记录查询/删除均限定 `user_id`，杜绝越权读/删他人数据（FR-05；AC-05）。
 
 ---
@@ -316,8 +325,8 @@ PRAGMA foreign_keys = ON;
 |------|------|---------------|-------------|
 | FR-01 登录注册 | 注册唯一性、密码散列落库、登录比对 | `user`（username 唯一索引、password_hash、salt） | `UserController.register/login`、`UserDao.insert/findByUsername/existsUsername` |
 | FR-02 身高体重录入 | 身高体重区间校验后入库 | `body_record.height`(CHECK 50–250)、`weight`(CHECK 10–300) | `RecordInputPanel.onSave`、`RecordController.createRecord` |
-| FR-03 BMI 计算分级 | BMI 持久化（公式计算在 model 层） | `body_record.bmi` | `BmiCalculator.calcBmi`、`RecordController` |
-| FR-04 体脂预测 | 体脂率持久化（Deurenberg 估算在 model 层） | `body_record.body_fat` | `BodyFatCalculator.predictBodyFat`、`RecordController` |
+| FR-03 BMI 计算分级 | BMI 持久化（公式计算在 model 层） | `body_record.bmi` | `CalcUtil.calcBmi`、`RecordController` |
+| FR-04 体脂预测 | 体脂率持久化（Deurenberg 估算在 model 层） | `body_record.body_fat` | `CalcUtil.predictBodyFat`、`RecordController` |
 | FR-05 历史记录 | 保存每次测量、按用户+时间查询、删除本人记录 | `body_record`（全字段、`user_id` 外键、`idx_record_user_time` 索引） | `RecordController.queryRecords/deleteRecord`、`RecordDao.queryByUser/deleteById` |
 | FR-06 折线图 | 按时间取序列渲染 | 查询 `body_record`（measure_time + 指标） | `ChartController.getSeries`、`ChartPanel.repaint` |
 | AC-05 查询 <1s | 联合索引加速千条级查询 | `idx_record_user_time(user_id, measure_time)` | `RecordDao.queryByUser` |
@@ -328,8 +337,10 @@ PRAGMA foreign_keys = ON;
 
 ## 附录：一键执行检查清单
 
-- [ ] SQLite：`PRAGMA foreign_keys = ON;` 已写入 `DbUtil.getConnection()`。
+- [ ] SQLite：`PRAGMA foreign_keys = ON;` 已写入 `JdbcUtil.getConnection()`。
 - [ ] 表名按团队决议固定为 `user`/`body_record` 或统一回 `t_user`/`t_record`（勿混用）。
 - [ ] MySQL 部署时确认版本 ≥ 8.0（CHECK 约束生效）且存储引擎 InnoDB。
 - [ ] `db-config.properties` / `ai-key.properties` 已加入 gitignore，未硬编码。
 - [ ] DAO 层对 `user` 表的引用在 MySQL 下均带反引号。
+- [ ] `JdbcUtil.getConnection()` 已应用 `CONNECT_TIMEOUT_MS`（setLoginTimeout）与 `READ_TIMEOUT_MS`（setNetworkTimeout）超时常量。
+- [ ] `CalcUtil` 位于 `com.bmi.model.ai` 包，`BmiCategory` 枚举位于 `com.bmi.model` 包，跨包 import 已配置。
