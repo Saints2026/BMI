@@ -192,11 +192,13 @@ public class LoginView extends BorderPane implements LangChangeListener {
     }
 
     private void doLogin() {
-        if (!captchaField.getText().trim().equals(captcha)) {
-            loginMsg.setText(I18n.t("login.errorCode"));
-            loginMsg.setStyle("-fx-text-fill:#f44336;");
-            return;
-        }
+        // [TEST] 临时跳过验证码校验，便于 AI 模块测试
+        // if (!captchaField.getText().trim().equals(captcha)) {
+        //     loginMsg.setText(I18n.t("login.errorCode"));
+        //     loginMsg.setStyle("-fx-text-fill:#f44336;");
+        //     return;
+        // }
+        System.out.println("登录跳过验证码");
         String u = usernameField.getText().trim();
         String p = passwordField.getText();
         if (u.isEmpty() || p.isEmpty()) {
