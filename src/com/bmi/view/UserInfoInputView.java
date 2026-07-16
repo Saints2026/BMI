@@ -181,13 +181,13 @@ public class UserInfoInputView extends BorderPane implements LangChangeListener 
 
         int row = 0;
 
-        // Row 0: 性别 | 年龄
-        addFormCell(formGrid, row++, 0, "input.gender", cbGender, null);
-        addFormCell(formGrid, row, 1, "input.age", tfAge, errAge);
+        // Row 0: 性别* | 年龄*
+        addFormCell(formGrid, row++, 0, "input.gender", cbGender, null, true);
+        addFormCell(formGrid, row, 1, "input.age", tfAge, errAge, true);
 
-        // Row 1: 身高cm | 体重kg
-        addFormCell(formGrid, row++, 0, "input.height", tfHeight, errHeight);
-        addFormCell(formGrid, row, 1, "input.weight", tfWeight, errWeight);
+        // Row 1: 身高cm* | 体重kg*
+        addFormCell(formGrid, row++, 0, "input.height", tfHeight, errHeight, true);
+        addFormCell(formGrid, row, 1, "input.weight", tfWeight, errWeight, true);
 
         // Row 2: 腰围cm | 臀围cm
         addFormCell(formGrid, row++, 0, "input.waist", tfWaist, null);
@@ -196,9 +196,9 @@ public class UserInfoInputView extends BorderPane implements LangChangeListener 
         // Row 3: 体脂率% | (spacer)
         addFormCell(formGrid, row++, 0, "input.bodyfat", tfBodyFat, null);
 
-        // Row 4: 收缩压mmHg(*) | 舒张压mmHg(*) — required fields with red asterisk
-        addRequiredFormCell(formGrid, row++, 0, "input.systolic", tfSys, errSys);
-        addRequiredFormCell(formGrid, row, 1, "input.diastolic", tfDia, errDia);
+        // Row 4: 收缩压mmHg | 舒张压mmHg — optional fields (no red asterisk, empty allowed)
+        addFormCell(formGrid, row++, 0, "input.systolic", tfSys, errSys);
+        addFormCell(formGrid, row, 1, "input.diastolic", tfDia, errDia);
 
         // Row 5: 吸烟习惯 | 饮酒习惯
         addComboCell(formGrid, row++, 0, "input.smoking", cbSmoking);
@@ -221,29 +221,38 @@ public class UserInfoInputView extends BorderPane implements LangChangeListener 
         return scroll;
     }
 
-    /** Add a standard form cell (label + field) to grid. */
+    /** Add a standard (optional) form cell: label + grey "选填" small text. */
     private void addFormCell(GridPane grid, int row, int col, String key, Node control, Label err) {
+        addFormCell(grid, row, col, key, control, err, false);
+    }
+
+    /** Add a form cell. required -> red "*"; optional -> grey "选填" small label. */
+    private void addFormCell(GridPane grid, int row, int col, String key, Node control, Label err, boolean required) {
         Label label = new Label(I18nUtil.t(key));
         label.setStyle("-fx-font-size:13px; -fx-text-fill:-bmi-fg;");
-        VBox cell = new VBox(3, label, control);
+        HBox labelBox = new HBox(6, label);
+        if (required) {
+            Label star = new Label("*");
+            star.setStyle("-fx-text-fill:#f76b6c; -fx-font-weight:bold; -fx-font-size:13px;");
+            labelBox.getChildren().add(star);
+        } else {
+            Label opt = new Label(I18nUtil.t("input.optional"));
+            opt.setStyle("-fx-font-size:10px; -fx-text-fill:#999999;");
+            labelBox.getChildren().add(opt);
+        }
+        VBox cell = new VBox(3, labelBox, control);
         if (err != null) cell.getChildren().add(err);
         grid.add(cell, col, row);
     }
 
-    /** Add a required form cell (red asterisk on label). */
-    private void addRequiredFormCell(GridPane grid, int row, int col, String key, TextField tf, Label err) {
-        Label label = new Label(I18nUtil.t(key) + " *");
-        label.setStyle("-fx-font-size:13px; -fx-text-fill:#f76b6c;");
-        VBox cell = new VBox(3, label, tf);
-        if (err != null) cell.getChildren().add(err);
-        grid.add(cell, col, row);
-    }
-
-    /** Add a combo box cell. */
+    /** Add a combo box cell (optional -> grey "选填"). */
     private void addComboCell(GridPane grid, int row, int col, String key, ComboBox<String> cb) {
         Label label = new Label(I18nUtil.t(key));
         label.setStyle("-fx-font-size:13px; -fx-text-fill:-bmi-fg;");
-        VBox cell = new VBox(3, label, cb);
+        Label opt = new Label(I18nUtil.t("input.optional"));
+        opt.setStyle("-fx-font-size:10px; -fx-text-fill:#999999;");
+        HBox labelBox = new HBox(6, label, opt);
+        VBox cell = new VBox(3, labelBox, cb);
         grid.add(cell, col, row);
     }
 
@@ -273,8 +282,7 @@ public class UserInfoInputView extends BorderPane implements LangChangeListener 
 
         submitBtn.disableProperty().bind(
                 Bindings.createBooleanBinding(this::basicValid,
-                        tfHeight.textProperty(), tfWeight.textProperty(), tfAge.textProperty(),
-                        tfSys.textProperty(), tfDia.textProperty()).not());
+                        tfHeight.textProperty(), tfWeight.textProperty(), tfAge.textProperty()).not());
     }
 
     private void recalcBmi() {
@@ -309,7 +317,7 @@ public class UserInfoInputView extends BorderPane implements LangChangeListener 
 
     private void validateBpRange(TextField tf, Label err) {
         Double v = num(tf);
-        if (v == null) { StyleFactory.markError(tf, err, "validate.required"); return; }
+        if (v == null) { StyleFactory.clearError(tf, err); return; } // optional: empty is OK
         if (tf == tfSys && (v < 60 || v > 220)) {
             StyleFactory.markError(tf, err, "validate.sysRange"); return;
         }
@@ -346,10 +354,9 @@ public class UserInfoInputView extends BorderPane implements LangChangeListener 
         if (a < 1 || a > 120) return "validate.age";
         if (w == null) return "validate.required";
         if (w <= 0) return "validate.negative";
-        if (s == null) return "validate.required";
-        if (s < 60 || s > 220) return "validate.sysRange";
-        if (d == null) return "validate.required";
-        if (d < 40 || d > 140) return "validate.diaRange";
+        // BP is optional: only validate range if value is entered
+        if (s != null && (s < 60 || s > 220)) return "validate.sysRange";
+        if (d != null && (d < 40 || d > 140)) return "validate.diaRange";
         return null;
     }
 

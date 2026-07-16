@@ -39,10 +39,33 @@ public final class AppConfig {
     private static final AppConfig INSTANCE = new AppConfig();
 
     /** 本地配置文件：仅保存语言、主题、加密登录信息（密钥独立，不混存）。 */
-    private static final Path CONFIG = Paths.get("app-config.properties");
+    private static final Path CONFIG = resolveConfigPath();
+
+    /**
+     * 解析配置文件路径，保证返回值为「工作目录可用时非 null」。
+     * 优先取用户工作目录（user.dir）下的 app-config.properties；
+     * 当工作目录获取失败或路径解析异常时，回退到 JVM 启动目录的相对路径，
+     * 再异常则回退为 null —— 读写逻辑会判断 null 并加载默认配置、不阻断启动。
+     */
+    private static Path resolveConfigPath() {
+        try {
+            String dir = System.getProperty("user.dir");
+            if (dir != null && !dir.trim().isEmpty()) {
+                return Paths.get(dir, "app-config.properties").toAbsolutePath();
+            }
+        } catch (Exception ignored) {
+            // 回退到下方默认解析
+        }
+        try {
+            return Paths.get("app-config.properties").toAbsolutePath();
+        } catch (Exception ignored) {
+            return null; // 极端场景兜底，读写逻辑判断 null 后加载默认配置
+        }
+    }
 
     private Lang lang = Lang.ZH;
     private String theme = "fresh";
+    private boolean mockDaoEnabled = false; // Mock 模式：开启后使用 MockUserDao 脱离后端自测
     private final List<LangChangeListener> listeners = new ArrayList<>();
     private final List<ThemeChangeListener> themeListeners = new ArrayList<>();
 
@@ -63,6 +86,8 @@ public final class AppConfig {
         this.lang = (lc != null && !lc.trim().isEmpty()) ? Lang.fromCode(lc) : Lang.ZH;
         String th = p.getProperty("ui.theme");
         this.theme = (th != null && !th.trim().isEmpty()) ? th.trim() : "fresh";
+        // Mock 模式开关（缺省关闭，走原 InMemoryUserDao）
+        this.mockDaoEnabled = Boolean.parseBoolean(p.getProperty("mock.dao.enabled", "false"));
     }
 
     // ============ 语言 ============
@@ -141,6 +166,19 @@ public final class AppConfig {
         setProp("ui.remember.pwdHash", "");
     }
 
+    // ============ Mock 模式开关（离线自测，不依赖后端） ============
+
+    /** 是否开启 Mock 模式：开启后 BmiApplication 使用 MockUserDao（内存预置 test01/Test1234）。 */
+    public boolean isMockDaoEnabled() {
+        return mockDaoEnabled;
+    }
+
+    /** 设置 Mock 模式开关并持久化到 app-config.properties（mock.dao.enabled）。 */
+    public void setMockDaoEnabled(boolean on) {
+        this.mockDaoEnabled = on;
+        setProp("mock.dao.enabled", Boolean.toString(on));
+    }
+
     // ============ 监听器注册 ============
 
     public void addListener(LangChangeListener l) {
@@ -167,8 +205,19 @@ public final class AppConfig {
 
     private Properties load() {
         Properties p = new Properties();
-        if (!Files.isRegularFile(CONFIG)) {
+        // ① 空值兜底：路径解析失败直接返回默认配置，绝不把 null 传入 Files.* 触发 NPE
+        if (CONFIG == null) {
             return p;
+        }
+        // ② 安全兜底：isRegularFile 可能因权限/安全策略抛异常，按「文件不存在」处理
+        boolean exists;
+        try {
+            exists = Files.isRegularFile(CONFIG);
+        } catch (Exception ignored) {
+            return p; // 文件不存在 / 无访问权限 -> 加载默认配置，不阻断启动
+        }
+        if (!exists) {
+            return p; // 文件不存在同样加载默认配置，不抛异常
         }
         try (InputStream is = Files.newInputStream(CONFIG)) {
             p.load(is); // app-config.properties 仅存 ASCII 码值，无需 UTF-8
@@ -181,6 +230,10 @@ public final class AppConfig {
     private void setProp(String key, String value) {
         Properties p = load();
         p.setProperty(key, value == null ? "" : value);
+        // ③ 路径兜底：解析失败无法持久化，内存态仍生效，不阻断程序
+        if (CONFIG == null) {
+            return;
+        }
         try {
             Path parent = CONFIG.toAbsolutePath().getParent();
             if (parent != null) {

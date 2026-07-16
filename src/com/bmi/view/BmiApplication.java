@@ -10,6 +10,7 @@ import com.bmi.controller.UserController;
 import com.bmi.i18n.AppConfig;
 import com.bmi.i18n.I18n;
 import com.bmi.model.User;
+import com.bmi.view.util.MockUserDao;
 import com.bmi.view.util.PageNavigator;
 import com.bmi.view.util.UserSession;
 import javafx.application.Application;
@@ -31,7 +32,12 @@ import javafx.stage.Stage;
 public class BmiApplication extends Application implements PageNavigator.NavigationHost {
 
     private final com.bmi.model.db.RecordDao recordDao = new com.bmi.model.db.JdbcRecordDao();
-    private final UserController userController = new UserController(new com.bmi.model.db.InMemoryUserDao());
+    // Mock 模式开关开启时（app-config.properties 的 mock.dao.enabled=true）使用 MockUserDao
+    // 脱离后端自测；否则沿用原 InMemoryUserDao。两者均实现 UserDao，不改动后端业务文件。
+    private final UserController userController = new UserController(
+            AppConfig.getInstance().isMockDaoEnabled()
+                    ? new MockUserDao()
+                    : new com.bmi.model.db.InMemoryUserDao());
     private final SettingController settingController = new SettingController();
 
     // 以下重控制器延迟到进入主界面（buildMain）时才构造，避免启动期不必要的后端耦合与阻塞

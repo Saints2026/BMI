@@ -26,24 +26,23 @@ import javafx.scene.control.TextField;
 import javafx.scene.Node;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
-import javafx.scene.layout.Region;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
 import javafx.util.Duration;
 
-import java.security.SecureRandom;
 import java.util.ArrayList;
 import java.util.List;
 
 /**
  * Login Page — 图1 登录界面（像素级复刻效果图）
  *
- * <p>Layout:
+ * <p>Layout (NO captcha on this page — captcha is register-only):
  * <ul>
  *   <li>Top navbar: green "BMI" logo left, 4 static icon circles,
  *       language dropdown right</li>
  *   <li>Center white card: title "登录账号", username, password+visibility toggle,
- *       remember checkbox, captcha display + 3x4 keypad, mint-green login button</li>
+ *       remember checkbox, mint-green login button</li>
+ *   <li>Card bottom: "已有帐号？前往注册" link</li>
  *   <li>Bottom hint text about registered accounts</li>
  *   <li>Background: static decoration area</li>
  * </ul>
@@ -65,14 +64,6 @@ public class LoginView extends StackPane implements LangChangeListener {
     // Remember login checkbox
     private final CheckBox rememberCheck = new CheckBox();
 
-    // Captcha system
-    private String generatedCode = "";
-    private final List<TextField> codeDigits = new ArrayList<>();
-    private final Label errToken = new Label();
-    private final Label codeDisplayLabel = new Label();
-    private final Button refreshCodeBtn = new Button("\u21BB");
-    private VBox keypadPane;
-
     // Buttons
     private final Button submitBtn = new Button();
     private final Button toRegisterBtn = new Button();
@@ -84,14 +75,11 @@ public class LoginView extends StackPane implements LangChangeListener {
     // Top decorative icons
     private final List<Button> decoIcons = new ArrayList<>(4);
 
-    private static final SecureRandom RNG = new SecureRandom();
-
     public LoginView(UserController userController, SettingController settingController) {
         this.userController = userController;
         this.settingController = settingController;
 
         buildUi();
-        generateNewCode();
         refreshTexts();
         // 记住登录：重启自动预填用户名（仅存密文，不预填密码）
         if (AppConfig.getInstance().hasRemembered()) {
@@ -99,20 +87,6 @@ public class LoginView extends StackPane implements LangChangeListener {
             rememberCheck.setSelected(true);
         }
         AppConfig.getInstance().addListener(this);
-    }
-
-    private void generateNewCode() {
-        StringBuilder sb = new StringBuilder(6);
-        for (int i = 0; i < 6; i++) sb.append(RNG.nextInt(10));
-        generatedCode = sb.toString();
-        codeDisplayLabel.setText(generatedCode);
-        for (TextField tf : codeDigits) tf.clear();
-    }
-
-    private String getEnteredCode() {
-        StringBuilder sb = new StringBuilder(6);
-        for (TextField tf : codeDigits) sb.append(tf.getText().isEmpty() ? " " : tf.getText());
-        return sb.toString().trim();
     }
 
     private void buildUi() {
@@ -143,7 +117,7 @@ public class LoginView extends StackPane implements LangChangeListener {
         langCombo.setOnAction(e -> {
             Lang l = langCombo.getValue();
             if (l != null) {
-                I18nUtil.setLang(l); // 经 AppConfig 广播并持久化，移除旧 setLangDefault 单向写回
+                I18nUtil.setLang(l);
             }
         });
 
@@ -152,8 +126,7 @@ public class LoginView extends StackPane implements LangChangeListener {
         topNavbar.setAlignment(Pos.CENTER_LEFT);
         HBox.setHgrow(langCombo, Priority.ALWAYS);
 
-        /* ====== Center White Card ====== */
-        errToken.setStyle("-fx-text-fill:" + ThemeConstant.STATUS_DANGER + "; -fx-font-size:11px; -fx-min-height:14;");
+        /* ====== Center White Card (NO captcha — removed per requirement) ====== */
 
         // Title & subtitle
         Label cardTitle = new Label();
@@ -177,74 +150,45 @@ public class LoginView extends StackPane implements LangChangeListener {
         rememberCheck.setText(I18nUtil.t("login.remember"));
         rememberCheck.getStyleClass().add("bmi-check");
 
-        // Captcha display label
-        codeDisplayLabel.getStyleClass().add("bmi-captcha-display");
-        codeDisplayLabel.setAlignment(Pos.CENTER);
-
-        refreshCodeBtn.setStyle("-fx-background-color:transparent; -fx-border-color:transparent;"
-                + "-fx-text-fill:" + ThemeConstant.DEFAULT_THEME.primary() + ";"
-                + "-fx-cursor:hand; -fx-font-size:18px; -fx-font-weight:bold;");
-        refreshCodeBtn.setOnAction(e -> generateNewCode());
-
-        HBox codeShow = new HBox(8, codeDisplayLabel, refreshCodeBtn);
-        codeShow.setAlignment(Pos.CENTER_LEFT);
-
-        // 6 digit inputs
-        HBox digitBox = new HBox(6);
-        digitBox.setAlignment(Pos.CENTER);
-        for (int i = 0; i < 6; i++) {
-            TextField d = new TextField();
-            d.getStyleClass().addAll("bmi-field", "bmi-code-digit");
-            d.setMaxSize(Region.USE_PREF_SIZE, Region.USE_PREF_SIZE);
-            d.setPrefColumnCount(1);
-            final int idx = i;
-            d.textProperty().addListener((o, old, val) -> {
-                if (!val.isEmpty()) {
-                    if (idx < 5 && codeDigits.get(idx + 1).getText().isEmpty()) {
-                        codeDigits.get(idx + 1).requestFocus();
-                    } else if (idx == 5) {
-                        d.getParent().requestFocus();
-                    }
-                }
-            });
-            codeDigits.add(d);
-            digitBox.getChildren().add(d);
-        }
-
-        // Keypad
-        keypadPane = buildKeypad();
-
-        // Captcha section
-        VBox captchaSection = new VBox(8, digitBox, codeShow, errToken, keypadSection());
+        // Switch-to-register link (card bottom)
+        toRegisterBtn.getStyleClass().add("bmi-btn-link");
+        toRegisterBtn.setOnAction(e -> goRegister());
 
         // Mint green (#7cd9b5) submit button
         submitBtn.getStyleClass().add("bmi-btn-login-green");
         submitBtn.setMaxWidth(Double.MAX_VALUE);
         submitBtn.setOnAction(e -> doLogin());
 
-        // Card content
+        // Card content (centered, no captcha)
         VBox formContent = new VBox(12,
                 usernameRow,
                 passwordBox,
                 rememberCheck,
-                captchaSection,
+                toRegisterBtn,
                 submitBtn);
         formContent.setFillWidth(true);
 
-        VBox card = new VStack(20,
+        VStack cardBody = new VStack(20,
                 cardTitle,
                 cardSubTitle,
                 formContent);
-        card.setPadding(new Insets(28, 32, 24, 32));
-        card.setMaxWidth(420);
-        card.getStyleClass().add("bmi-register-card");
+        cardBody.setPadding(new Insets(28, 32, 24, 32));
+        cardBody.setMaxWidth(420);
+        cardBody.setStyle("-fx-background-color:white; -fx-background-radius:10;"
+                + "-fx-effect:dropshadow(three-pass-box, rgba(0,0,0,0.08), 12, 0, 0, 4);");
 
         /* ====== Bottom Hint Text ====== */
         bottomHint.getStyleClass().add("bmi-bottom-hint");
         bottomHint.setAlignment(Pos.CENTER);
 
-        /* ====== Assemble page ====== */
-        VBox pageRoot = new VStack(0, topNavbar, card, bottomHint);
+        /* ====== Assemble page: card fully centered (horizontal + vertical) ====== */
+        // Center area grows to fill the space and centers the card both axes,
+        // so the form stays centered on window resize.
+        StackPane centerArea = new StackPane(cardBody);
+        centerArea.setAlignment(Pos.CENTER);
+        VBox.setVgrow(centerArea, Priority.ALWAYS);
+
+        VBox pageRoot = new VStack(0, topNavbar, centerArea, bottomHint);
         pageRoot.setFillWidth(true);
         pageRoot.getStyleClass().add("bmi-page-bg");
         pageRoot.setPadding(new Insets(0, 0, 16, 0));
@@ -256,7 +200,6 @@ public class LoginView extends StackPane implements LangChangeListener {
     /** Toggle password visibility (simple icon toggle, no field swap for stability). */
     private void togglePasswordVisibility() {
         pwdVisible = !pwdVisible;
-        // Toggle icon between eye (visible) and X (hidden)
         if (pwdVisible) {
             pwdToggleBtn.setText("\u2715"); // X mark = hide
         } else {
@@ -264,71 +207,21 @@ public class LoginView extends StackPane implements LangChangeListener {
         }
     }
 
-    private VBox buildKeypad() {
-        VBox pad = new VBox(4);
-        pad.setAlignment(Pos.CENTER);
-        pad.getStyleClass().add("bmi-keypad");
-        pad.setMaxWidth(260);
-
-        String[][] rows = {{"1","2","3"}, {"4","5","6"}, {"7","8","9"},
-                {"clear","0","backspace"}};
-        for (String[] row : rows) {
-            HBox h = new HBox(4);
-            h.setAlignment(Pos.CENTER);
-            for (String key : row) {
-                Button kb = new Button(key.equals("clear") ? "C"
-                        : key.equals("backspace") ? "\u232B" : key);
-                kb.getStyleClass().add("bmi-keypad-btn");
-                final String k = key;
-                kb.setOnAction(e -> handleKeypress(k));
-                h.getChildren().add(kb);
-            }
-            pad.getChildren().add(h);
-        }
-        return pad;
-    }
-
-    private Node keypadSection() {
-        return buildKeypad();
-    }
-
-    private void handleKeypress(String key) {
-        if (key.matches("\\d")) {
-            for (TextField tf : codeDigits) { if (tf.getText().isEmpty()) { tf.setText(key); break; } }
-        } else if ("backspace".equals(key)) {
-            for (int i = 5; i >= 0; i--) {
-                if (!codeDigits.get(i).getText().isEmpty()) {
-                    codeDigits.get(i).clear();
-                    if (i > 0) codeDigits.get(i - 1).requestFocus();
-                    break;
-                }
-            }
-        } else if ("clear".equals(key)) { generateNewCode(); }
-    }
-
     private VBox formRow(String key, Node node) {
         return new VBox(3, new Label(I18nUtil.t(key)), node);
     }
 
+    /* ==================== Login Logic (NO captcha validation) ==================== */
+
     private void doLogin() {
         String u = usernameField.getText().trim();
         String p = passwordField.getText();
-        String entered = getEnteredCode();
 
         if (u.isEmpty() || p.isEmpty()) {
             ToastBar.showWarning(I18nUtil.t("login.errorEmpty"));
             return;
         }
-        if (!generatedCode.equals(entered)) {
-            errToken.setText(I18nUtil.t("login.errorCode"));
-            ToastBar.showError(I18nUtil.t("login.errorCode"));
-            for (TextField tf : codeDigits)
-                if (!tf.getStyleClass().contains("bmi-field-error"))
-                    tf.getStyleClass().add("bmi-field-error");
-            return;
-        }
-        errToken.setText("");
-        for (TextField tf : codeDigits) tf.getStyleClass().remove("bmi-field-error");
+        // No captcha check — captcha removed from login page
 
         User okUser = UserSession.getInstance().findRegisteredUser(u, p);
         if (okUser == null) {
@@ -363,6 +256,11 @@ public class LoginView extends StackPane implements LangChangeListener {
         PageNavigator.toUserInfoInput(user);
     }
 
+    private void goRegister() {
+        AppConfig.getInstance().removeListener(this);
+        PageNavigator.toRegister();
+    }
+
     private javafx.scene.control.ListCell<Lang> langCell() {
         return new javafx.scene.control.ListCell<Lang>() {
             @Override protected void updateItem(Lang item, boolean empty) {
@@ -381,7 +279,7 @@ public class LoginView extends StackPane implements LangChangeListener {
         bottomHint.setText(I18nUtil.t("login.bottomHint"));
     }
 
-    /** 双向同步：把下拉选中值对齐内存语言变量，消除「选中文却变英文」的单向覆盖。 */
+    /** Bidirectional sync: align combo selected value with in-memory language variable. */
     private void syncLangCombo() {
         Lang cur = AppConfig.getInstance().getLang();
         if (langCombo.getValue() != cur) {
