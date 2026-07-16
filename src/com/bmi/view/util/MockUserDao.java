@@ -4,7 +4,7 @@ import com.bmi.model.User;
 import com.bmi.model.db.UserDao;
 
 import java.security.MessageDigest;
-import java.sql.Timestamp;
+import java.time.LocalDateTime;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
@@ -39,7 +39,7 @@ public class MockUserDao implements UserDao {
         u.setUsername(SEED_USERNAME);
         u.setSalt(salt);
         u.setPasswordHash(sha256hex(salt + SEED_PASSWORD));
-        u.setCreatedAt(new Timestamp(System.currentTimeMillis()));
+        u.setCreatedAt(LocalDateTime.now());
         u.setStatus(1);
         u.setId(idSeq.getAndIncrement());
         byUsername.put(SEED_USERNAME, u);
@@ -56,11 +56,23 @@ public class MockUserDao implements UserDao {
     }
 
     @Override
-    public void insert(User user) {
+    public User login(String username, String password) {
+        if (username == null || password == null) return null;
+        if (!existsUsername(username)) return null;
+        User user = findByUsername(username);
+        if (user == null) return null;
+        // SHA-256(salt + 明文) 比对，契约与 InMemoryUserDao / UserController 一致
+        String inputHash = sha256hex(user.getSalt() + password);
+        return user.getPasswordHash().equals(inputHash) ? user : null;
+    }
+
+    @Override
+    public boolean insert(User user) {
         if (user.getId() == 0) {
             user.setId(idSeq.getAndIncrement());
         }
         byUsername.put(user.getUsername(), user);
+        return true;
     }
 
     @Override
