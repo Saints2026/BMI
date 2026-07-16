@@ -26,6 +26,7 @@ import javafx.scene.control.TextField;
 import javafx.scene.Node;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
+import javafx.scene.layout.Region;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
 import javafx.util.Duration;
@@ -154,20 +155,24 @@ public class LoginView extends StackPane implements LangChangeListener {
         toRegisterBtn.getStyleClass().add("bmi-btn-link");
         toRegisterBtn.setOnAction(e -> goRegister());
 
-        // 主色提交按钮 RGB(45,140,220)：高度36px / 最小宽110px / 内边距8px 16px / 文字居中不截断
+        // 主色提交按钮 RGB(45,140,220)：高度36px / 最小宽110px / 内边距8px 16px / 文字居中
+        // 宽度由内容与内边距共同决定（maxWidth=USE_PREF_SIZE），不被拉伸也不被压缩，文字不截断
         submitBtn.getStyleClass().addAll("bmi-btn", "bmi-btn-primary");
-        submitBtn.setMaxWidth(Double.MAX_VALUE);
-        submitBtn.setStyle("-fx-min-height:36px; -fx-pref-height:36px; -fx-min-width:110px;"
-                + " -fx-padding:8px 16px; -fx-alignment:CENTER;");
+        submitBtn.setMaxWidth(Region.USE_PREF_SIZE);
+        submitBtn.setStyle("-fx-min-height:36px; -fx-pref-height:36px; -fx-max-height:36px;"
+                + " -fx-min-width:110px; -fx-padding:8px 16px; -fx-alignment:CENTER;"
+                + " -fx-background-color:rgb(45,140,220); -fx-text-fill:rgb(255,255,255);");
         submitBtn.setOnAction(e -> doLogin());
 
         // Card content (centered, no captcha)
+        HBox submitBox = new HBox(submitBtn);
+        submitBox.setAlignment(Pos.CENTER); // 按钮按内容宽度居中，不拉伸
         VBox formContent = new VBox(12,
                 usernameRow,
                 passwordBox,
                 rememberCheck,
                 toRegisterBtn,
-                submitBtn);
+                submitBox);
         formContent.setFillWidth(true);
 
         VStack cardBody = new VStack(20,
