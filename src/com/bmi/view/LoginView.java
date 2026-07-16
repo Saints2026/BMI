@@ -154,9 +154,11 @@ public class LoginView extends StackPane implements LangChangeListener {
         toRegisterBtn.getStyleClass().add("bmi-btn-link");
         toRegisterBtn.setOnAction(e -> goRegister());
 
-        // Mint green (#7cd9b5) submit button
-        submitBtn.getStyleClass().add("bmi-btn-login-green");
+        // 主色提交按钮 RGB(45,140,220)：高度36px / 最小宽110px / 内边距8px 16px / 文字居中不截断
+        submitBtn.getStyleClass().addAll("bmi-btn", "bmi-btn-primary");
         submitBtn.setMaxWidth(Double.MAX_VALUE);
+        submitBtn.setStyle("-fx-min-height:36px; -fx-pref-height:36px; -fx-min-width:110px;"
+                + " -fx-padding:8px 16px; -fx-alignment:CENTER;");
         submitBtn.setOnAction(e -> doLogin());
 
         // Card content (centered, no captcha)

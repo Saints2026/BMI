@@ -52,64 +52,88 @@ public final class PageNavigator {
         System.out.println("[BMI] PageNavigator.init: stage prepared, size=" + width + "x" + height);
     }
 
+    /**
+     * 全部页面常量注册表（线性 8 跳 + 分支 3 跳）。
+     * 每个常量封装「如何构建自己的 Parent」，是路由的唯一权威源；
+     * 各视图仍调用 {@code toX(...)} 便捷方法，其全部委托本枚举，避免重复与漂移。
+     */
+    public enum Page {
+        LOGIN           { @Override Parent build(User u, BodyRecord r) { return host.buildLogin(); } },
+        REGISTER        { @Override Parent build(User u, BodyRecord r) { return host.buildRegister(); } },
+        USER_INFO_INPUT { @Override Parent build(User u, BodyRecord r) { return host.buildUserInfoInput(u); } },
+        INPUT           { @Override Parent build(User u, BodyRecord r) { return host.buildInput(u); } },
+        INPUT_EDIT      { @Override Parent build(User u, BodyRecord r) { return host.buildInputEdit(u, r); } },
+        HISTORY         { @Override Parent build(User u, BodyRecord r) { return host.buildHistory(u); } },
+        AI_ANALYSIS     { @Override Parent build(User u, BodyRecord r) { return host.buildAiAnalysis(u); } },
+        PHOTO           { @Override Parent build(User u, BodyRecord r) { return host.buildPhoto(u); } },
+        REPORT          { @Override Parent build(User u, BodyRecord r) { return host.buildReport(u); } },
+        SETTINGS        { @Override Parent build(User u, BodyRecord r) { return host.buildSettings(u); } };
+
+        abstract Parent build(User user, BodyRecord record);
+    }
+
+    /** 统一跳转入口：按页面常量构建 Parent 并换 Scene（注入样式 + 应用主题 + 显示舞台）。 */
+    public static void navigate(Page page, User user, BodyRecord record) {
+        if (page == null) {
+            System.err.println("[BMI][ERROR] PageNavigator.navigate: page is null");
+            return;
+        }
+        if (stage == null || host == null) {
+            System.err.println("[BMI][ERROR] PageNavigator.navigate: not initialized (stage/host is null)");
+            return;
+        }
+        System.out.println("[BMI] navigate -> " + page.name());
+        setScene(page.build(user, record));
+    }
+
     /** 跳转：注册首屏。 */
     public static void toRegister() {
-        System.out.println("[BMI] navigate -> RegisterView");
-        setScene(host.buildRegister());
+        navigate(Page.REGISTER, null, null);
     }
 
     /** 跳转：登录页（启动首屏）。 */
     public static void toLogin() {
-        System.out.println("[BMI] navigate -> LoginView");
-        setScene(host.buildLogin());
+        navigate(Page.LOGIN, null, null);
     }
 
     /** 跳转：体质录入页（携带已登录用户）。 */
     public static void toUserInfoInput(User user) {
-        System.out.println("[BMI] navigate -> UserInfoInputView");
-        setScene(host.buildUserInfoInput(user));
+        navigate(Page.USER_INFO_INPUT, user, null);
     }
 
     /** 跳转：数据录入页（新增记录）。 */
     public static void toInput(User user) {
-        System.out.println("[BMI] navigate -> InputView");
-        setScene(host.buildInput(user));
+        navigate(Page.INPUT, user, null);
     }
 
     /** 跳转：数据录入页（编辑既有记录）。 */
     public static void toInputEdit(User user, BodyRecord record) {
-        System.out.println("[BMI] navigate -> InputView(edit)");
-        setScene(host.buildInputEdit(user, record));
+        navigate(Page.INPUT_EDIT, user, record);
     }
 
     /** 跳转：历史记录页。 */
     public static void toHistory(User user) {
-        System.out.println("[BMI] navigate -> HistoryView");
-        setScene(host.buildHistory(user));
+        navigate(Page.HISTORY, user, null);
     }
 
     /** 跳转：AI 分析页。 */
     public static void toAiAnalysis(User user) {
-        System.out.println("[BMI] navigate -> AiAnalysisView");
-        setScene(host.buildAiAnalysis(user));
+        navigate(Page.AI_ANALYSIS, user, null);
     }
 
     /** 跳转：体型照片页（分支）。 */
     public static void toPhoto(User user) {
-        System.out.println("[BMI] navigate -> PhotoView");
-        setScene(host.buildPhoto(user));
+        navigate(Page.PHOTO, user, null);
     }
 
     /** 跳转：健康报告页（分支）。 */
     public static void toReport(User user) {
-        System.out.println("[BMI] navigate -> ReportView");
-        setScene(host.buildReport(user));
+        navigate(Page.REPORT, user, null);
     }
 
     /** 跳转：系统设置页（分支）。 */
     public static void toSettings(User user) {
-        System.out.println("[BMI] navigate -> SettingsView");
-        setScene(host.buildSettings(user));
+        navigate(Page.SETTINGS, user, null);
     }
 
     /**
