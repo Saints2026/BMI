@@ -4,7 +4,9 @@ import com.bmi.controller.AiController;
 import com.bmi.i18n.AppConfig;
 import com.bmi.i18n.LangChangeListener;
 import com.bmi.i18n.ThemeChangeListener;
+import com.bmi.model.User;
 import com.bmi.view.util.I18nUtil;
+import com.bmi.view.util.PageNavigator;
 import com.bmi.view.util.StyleFactory;
 import com.bmi.view.util.ThemeConstant;
 import javafx.geometry.Insets;
@@ -17,18 +19,22 @@ import javafx.scene.layout.VBox;
 /**
  * AI 健康分析页面（对齐 ai_design.md §2）。
  * 调用 {@link AiController#getAdvice(long)} 获取建议文案，展示三段建议。
+ * 线性链路：由 InputView 进入，返回亦至 InputView。
  */
 public class AiAnalysisView extends VBox implements LangChangeListener, ThemeChangeListener {
 
     private final AiController aiController;
+    private final User user;
     private final long userId;
     private final TextArea resultArea;
     private final Label title;
     private final Button getAdviceBtn;
+    private final Button backBtn;
 
-    public AiAnalysisView(AiController aiController, long userId) {
+    public AiAnalysisView(AiController aiController, User user) {
         this.aiController = aiController;
-        this.userId = userId;
+        this.user = user;
+        this.userId = user != null ? user.getId() : -1L;
         setPadding(new Insets(24));
         setSpacing(15);
         setStyle("-fx-background-color:" + ThemeConstant.DEFAULT_THEME.bg() + ";");
@@ -44,7 +50,10 @@ public class AiAnalysisView extends VBox implements LangChangeListener, ThemeCha
         getAdviceBtn = StyleFactory.primaryButton("ai.genAdvice");
         getAdviceBtn.setOnAction(e -> getAdvice());
 
-        VBox wrapper = new VBox(15, title, getAdviceBtn, resultArea);
+        backBtn = StyleFactory.secondaryButton("input.backToInput");
+        backBtn.setOnAction(e -> PageNavigator.toInput(user));
+
+        VBox wrapper = new VBox(15, title, getAdviceBtn, resultArea, backBtn);
         wrapper.setAlignment(Pos.TOP_LEFT);
         getChildren().add(wrapper);
 
@@ -75,6 +84,7 @@ public class AiAnalysisView extends VBox implements LangChangeListener, ThemeCha
     public void onLangChange() {
         title.setText(I18nUtil.t("ai.adviceText"));
         getAdviceBtn.setText(I18nUtil.t("ai.genAdvice"));
+        backBtn.setText(I18nUtil.t("input.backToInput"));
     }
 
     @Override

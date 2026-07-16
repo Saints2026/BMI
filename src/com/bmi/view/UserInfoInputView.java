@@ -130,7 +130,7 @@ public class UserInfoInputView extends BorderPane implements LangChangeListener 
         headerRow.setAlignment(Pos.CENTER_LEFT);
 
         // Large BMI value
-        bmiValueLabel.setStyle("-fx-font-size:32px; -fx-font-weight:bold; -fx-text-fill:#4096ff;");
+        bmiValueLabel.setStyle("-fx-font-size:32px; -fx-font-weight:bold; -fx-text-fill:rgb(45,140,220);");
         bmiValueLabel.getStyleClass().add("bmi-floating-bmi-value");
 
         // Subtext "实时计算中"
@@ -233,11 +233,11 @@ public class UserInfoInputView extends BorderPane implements LangChangeListener 
         HBox labelBox = new HBox(6, label);
         if (required) {
             Label star = new Label("*");
-            star.setStyle("-fx-text-fill:#f76b6c; -fx-font-weight:bold; -fx-font-size:13px;");
+            star.setStyle("-fx-text-fill:rgb(220,40,40); -fx-font-weight:bold; -fx-font-size:13px;");
             labelBox.getChildren().add(star);
         } else {
             Label opt = new Label(I18nUtil.t("input.optional"));
-            opt.setStyle("-fx-font-size:10px; -fx-text-fill:#999999;");
+            opt.setStyle("-fx-font-size:10px; -fx-text-fill:rgb(150,150,150);");
             labelBox.getChildren().add(opt);
         }
         VBox cell = new VBox(3, labelBox, control);
@@ -250,7 +250,7 @@ public class UserInfoInputView extends BorderPane implements LangChangeListener 
         Label label = new Label(I18nUtil.t(key));
         label.setStyle("-fx-font-size:13px; -fx-text-fill:-bmi-fg;");
         Label opt = new Label(I18nUtil.t("input.optional"));
-        opt.setStyle("-fx-font-size:10px; -fx-text-fill:#999999;");
+        opt.setStyle("-fx-font-size:10px; -fx-text-fill:rgb(150,150,150);");
         HBox labelBox = new HBox(6, label, opt);
         VBox cell = new VBox(3, labelBox, cb);
         grid.add(cell, col, row);
@@ -340,7 +340,7 @@ public class UserInfoInputView extends BorderPane implements LangChangeListener 
         if (ek != null) { ToastBar.showError(I18nUtil.t(ek)); return; }
         storeToSession();
         AppConfig.getInstance().removeListener(this);
-        PageNavigator.toMain(user);
+        PageNavigator.toInput(user);
     }
 
     private boolean basicValid() { return basicErrorKey() == null; }
@@ -386,10 +386,10 @@ public class UserInfoInputView extends BorderPane implements LangChangeListener 
     }
 
     private String gradeColor(double bmi) {
-        if (bmi < 18.5) return "#4096ff";      // thin — blue
-        if (bmi < 24)   return "#52c41a";      // normal — green
-        if (bmi < 28)   return "#faad14";      // overweight — orange
-        return "#f76b6c";                       // obese — red
+        if (bmi < 18.5) return "rgb(45,140,220)";      // thin — blue
+        if (bmi < 24)   return "rgb(40,160,60)";       // normal — green
+        if (bmi < 28)   return "rgb(240,170,20)";      // overweight — orange
+        return "rgb(220,40,40)";                       // obese — red
     }
 
     private void refreshTexts() {

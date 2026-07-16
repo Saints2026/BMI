@@ -346,7 +346,7 @@ public class RegisterView extends StackPane implements LangChangeListener {
 
     private VBox formRowWithStar(String key, TextField tf, Label errLabel) {
         Label label = new Label(I18nUtil.t(key) + " *");
-        label.setStyle("-fx-text-fill:#f76b6c; -fx-font-size:13px;");
+        label.setStyle("-fx-text-fill:rgb(220,40,40); -fx-font-size:13px;");
         tf.setMaxWidth(Double.MAX_VALUE);
         VBox b = new VBox(3, label, tf);
         if (errLabel != null) b.getChildren().add(errLabel);

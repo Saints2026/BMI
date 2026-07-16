@@ -174,7 +174,7 @@ public class LoginView extends StackPane implements LangChangeListener {
                 formContent);
         cardBody.setPadding(new Insets(28, 32, 24, 32));
         cardBody.setMaxWidth(420);
-        cardBody.setStyle("-fx-background-color:white; -fx-background-radius:10;"
+        cardBody.setStyle("-fx-background-color:rgb(255,255,255); -fx-background-radius:10;"
                 + "-fx-effect:dropshadow(three-pass-box, rgba(0,0,0,0.08), 12, 0, 0, 4);");
 
         /* ====== Bottom Hint Text ====== */

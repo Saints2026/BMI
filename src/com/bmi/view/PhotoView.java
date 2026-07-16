@@ -4,7 +4,9 @@ import com.bmi.controller.PhotoController;
 import com.bmi.i18n.AppConfig;
 import com.bmi.i18n.LangChangeListener;
 import com.bmi.i18n.ThemeChangeListener;
+import com.bmi.model.User;
 import com.bmi.view.util.I18nUtil;
+import com.bmi.view.util.PageNavigator;
 import com.bmi.view.util.StyleFactory;
 import com.bmi.view.util.ThemeConstant;
 import javafx.geometry.Insets;
@@ -22,20 +24,24 @@ import java.util.Date;
 /**
  * 体型照片管理页面（对齐 ui_design.md 第六章）。
  * 提供照片上传绑定、查看当前路径、解绑功能。
+ * 由 InputView 进入，底部【返回录入页】返回 InputView。
  */
 public class PhotoView extends VBox implements LangChangeListener, ThemeChangeListener {
 
     private final PhotoController photoController;
+    private final User user;
     private final long userId;
     private final Label title;
     private final Label statusLabel;
     private final ListView<String> photoList;
     private final Button uploadBtn;
     private final Button removeBtn;
+    private final Button backBtn;
 
-    public PhotoView(PhotoController photoController, long userId) {
+    public PhotoView(PhotoController photoController, User user) {
         this.photoController = photoController;
-        this.userId = userId;
+        this.user = user;
+        this.userId = user != null ? user.getId() : -1L;
         setPadding(new Insets(24));
         setSpacing(15);
         setStyle("-fx-background-color:" + ThemeConstant.DEFAULT_THEME.bg() + ";");
@@ -54,7 +60,10 @@ public class PhotoView extends VBox implements LangChangeListener, ThemeChangeLi
         removeBtn = StyleFactory.secondaryButton("common.delete");
         removeBtn.setOnAction(e -> onRemove());
 
-        HBox btnBox = new HBox(16, uploadBtn, removeBtn);
+        backBtn = StyleFactory.secondaryButton("input.backToInput");
+        backBtn.setOnAction(e -> PageNavigator.toInput(user));
+
+        HBox btnBox = new HBox(16, uploadBtn, removeBtn, backBtn);
         btnBox.setAlignment(Pos.CENTER_LEFT);
 
         getChildren().addAll(title, statusLabel, photoList, btnBox);
@@ -81,6 +90,7 @@ public class PhotoView extends VBox implements LangChangeListener, ThemeChangeLi
         statusLabel.setText(I18nUtil.t("photo.filename"));
         uploadBtn.setText(I18nUtil.t("photo.upload"));
         removeBtn.setText(I18nUtil.t("common.delete"));
+        backBtn.setText(I18nUtil.t("input.backToInput"));
     }
 
     @Override

@@ -5,6 +5,8 @@ import com.bmi.i18n.AppConfig;
 import com.bmi.view.util.I18nUtil;
 import com.bmi.i18n.LangChangeListener;
 import com.bmi.model.BodyRecord;
+import com.bmi.model.User;
+import com.bmi.view.util.PageNavigator;
 import com.bmi.view.util.StyleFactory;
 import com.bmi.view.util.ThemeConstant;
 import com.bmi.view.util.ToastBar;
@@ -17,8 +19,8 @@ import javafx.scene.control.Alert;
 import javafx.scene.control.Button;
 import javafx.scene.control.ButtonType;
 import javafx.scene.control.CheckBox;
-import javafx.scene.control.DatePicker;
 import javafx.scene.control.ComboBox;
+import javafx.scene.control.DatePicker;
 import javafx.scene.control.DialogPane;
 import javafx.scene.control.Label;
 import javafx.scene.control.TableCell;
@@ -28,13 +30,13 @@ import javafx.scene.control.cell.PropertyValueFactory;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
+import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
 
 import java.sql.Timestamp;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
-import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -42,11 +44,12 @@ import java.util.Optional;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
-public class HistoryView extends BorderPane implements LangChangeListener {
+public class HistoryView extends StackPane implements LangChangeListener {
 
+    private final User user;
     private final long userId;
     private final RecordController recordController;
-    private final ToastBar toast;
+    private final ToastBar toast = new ToastBar();
     private final Consumer<BodyRecord> onEdit;
 
     private final DatePicker dpStart = StyleFactory.datePicker();
@@ -75,21 +78,26 @@ public class HistoryView extends BorderPane implements LangChangeListener {
     private final Label chartTitle = StyleFactory.sectionTitle("chart.trend");
     private final Button btnExportChart = StyleFactory.primaryButton("chart.export");
 
-    public HistoryView(long userId, RecordController recordController, ToastBar toast,
-                       Consumer<BodyRecord> onEdit) {
-        this.userId = userId; this.recordController = recordController;
-        this.toast = toast; this.onEdit = onEdit;
+    public HistoryView(User user, RecordController recordController) {
+        this.user = user;
+        this.userId = user.getId();
+        this.recordController = recordController;
+        this.onEdit = r -> PageNavigator.toInputEdit(user, r);
 
+        BorderPane bp = new BorderPane();
         trendChart = buildTrendChart();
 
-        buildTopToolbar();
-        buildCenterContent();
-        buildBottomBar();
+        buildTopToolbar(bp);
+        buildCenterContent(bp);
+        buildBottomBar(bp);
         loadData();
         AppConfig.getInstance().addListener(this);
+
+        getChildren().addAll(bp, toast);
+        StackPane.setAlignment(toast, Pos.TOP_CENTER);
     }
 
-    private void buildTopToolbar() {
+    private void buildTopToolbar(BorderPane bp) {
         dpStart.getStyleClass().add("bmi-field");
         dpEnd.getStyleClass().add("bmi-field");
 
@@ -119,7 +127,7 @@ public class HistoryView extends BorderPane implements LangChangeListener {
         HBox.setHgrow(leftGroup, Priority.NEVER);
         HBox.setHgrow(rightGroup, Priority.ALWAYS);
 
-        setTop(fullBar);
+        bp.setTop(fullBar);
     }
 
     private void buildTable() {
@@ -244,7 +252,7 @@ public class HistoryView extends BorderPane implements LangChangeListener {
         trendChart.getData().add(series);
     }
 
-    private void buildCenterContent() {
+    private void buildCenterContent(BorderPane bp) {
         buildTable();
 
         HBox exportBar = new HBox(btnExportChart);
@@ -265,10 +273,10 @@ public class HistoryView extends BorderPane implements LangChangeListener {
         VBox.setVgrow(table, Priority.ALWAYS);
 
         VBox center = new VBox(10, tableBox, chartCard);
-        setCenter(center);
+        bp.setCenter(center);
     }
 
-    private void buildBottomBar() {
+    private void buildBottomBar(BorderPane bp) {
         btnBatchDelete.setOnAction(e -> confirmAndBatchDelete());
         btnTrendChart.setOnAction(e -> refreshTrendChart(table.getItems()));
 
@@ -276,7 +284,7 @@ public class HistoryView extends BorderPane implements LangChangeListener {
         bar.setPadding(new Insets(10, 16, 10, 16));
         bar.setAlignment(Pos.CENTER_LEFT);
         for (Button b : new Button[]{btnBatchDelete, btnTrendChart}) HBox.setHgrow(b, Priority.ALWAYS);
-        setBottom(bar);
+        bp.setBottom(bar);
     }
 
     private List<BodyRecord> fetchRecords() {

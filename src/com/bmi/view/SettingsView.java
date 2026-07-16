@@ -5,7 +5,9 @@ import com.bmi.i18n.AppConfig;
 import com.bmi.i18n.Lang;
 import com.bmi.i18n.LangChangeListener;
 import com.bmi.i18n.ThemeChangeListener;
+import com.bmi.model.User;
 import com.bmi.view.util.I18nUtil;
+import com.bmi.view.util.PageNavigator;
 import com.bmi.view.util.StyleFactory;
 import com.bmi.view.util.ThemeConstant;
 import com.bmi.view.util.ToastBar;
@@ -28,9 +30,10 @@ import java.util.List;
 
 public class SettingsView extends VBox implements LangChangeListener, ThemeChangeListener {
 
+    private final User user;
     private final long userId;
     private final SettingController settingController;
-    private final ToastBar toast;
+    private final ToastBar toast = new ToastBar();
 
     private final Button closeBtn = new Button("\u2715");
     private final ComboBox<Lang> langCombo = new ComboBox<>();
@@ -42,9 +45,12 @@ public class SettingsView extends VBox implements LangChangeListener, ThemeChang
     private final TextField pfName = StyleFactory.textField("setting.profile.name");
     private final Button pfEditBtn = StyleFactory.secondaryButton("setting.profile.edit");
     private final Button btnSave = StyleFactory.primaryButton("setting.save");
+    private final Button backBtn = StyleFactory.secondaryButton("input.backToInput");
 
-    public SettingsView(long userId, SettingController settingController, ToastBar toast) {
-        this.userId = userId; this.settingController = settingController; this.toast = toast;
+    public SettingsView(User user, SettingController settingController) {
+        this.user = user;
+        this.userId = user != null ? user.getId() : -1L;
+        this.settingController = settingController;
 
         setSpacing(0);
         setPadding(new Insets(0));
@@ -84,12 +90,15 @@ public class SettingsView extends VBox implements LangChangeListener, ThemeChang
 
         btnSave.setMaxWidth(Double.MAX_VALUE);
         btnSave.setOnAction(e -> doSave());
-        HBox bottomBar = new HBox(btnSave);
+        backBtn.setOnAction(e -> PageNavigator.toInput(user));
+
+        HBox bottomBar = new HBox(12, btnSave, backBtn);
         bottomBar.setPadding(new Insets(12, 20, 16, 20));
         bottomBar.setAlignment(Pos.CENTER_RIGHT);
         bottomBar.setStyle("-fx-background-color:-bmi-panel-solid; -fx-border-color:-bmi-border;"
                 + "-fx-border-width:1 0 0 0;");
         HBox.setHgrow(btnSave, Priority.NEVER);
+        HBox.setHgrow(backBtn, Priority.NEVER);
 
         getChildren().addAll(headerRow, splitContent, bottomBar);
     }

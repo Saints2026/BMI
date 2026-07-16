@@ -3,341 +3,341 @@ package com.bmi.view;
 import com.bmi.controller.ChartController;
 import com.bmi.controller.RecordController;
 import com.bmi.i18n.AppConfig;
-import com.bmi.view.util.I18nUtil;
 import com.bmi.i18n.LangChangeListener;
-import com.bmi.i18n.Lang;
 import com.bmi.model.BodyRecord;
-import com.bmi.view.util.Responsive;
+import com.bmi.model.User;
+import com.bmi.view.util.I18nUtil;
+import com.bmi.view.util.PageNavigator;
 import com.bmi.view.util.StyleFactory;
 import com.bmi.view.util.ThemeConstant;
 import com.bmi.view.util.ToastBar;
+import com.bmi.view.util.UserSession;
 import javafx.geometry.Insets;
+import javafx.geometry.Pos;
+import javafx.scene.Node;
 import javafx.scene.control.Button;
-import javafx.scene.control.ComboBox;
 import javafx.scene.control.DatePicker;
 import javafx.scene.control.Label;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.control.TextField;
-import javafx.scene.control.TitledPane;
 import javafx.scene.layout.BorderPane;
-import javafx.scene.layout.GridPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
+import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.function.Consumer;
-import java.util.stream.Collectors;
 
 /**
- * 体检数据录入页面（对齐 ui_design.md 第三章「InputView」+ 用户需求「自适应布局 / 标准化控件」）。
+ * 体检数据录入页面（线性链路：UserInfoInput → Input ↔ History ↔ AiAnalysis）。
  *
- * 外层 BorderPane；中心 ScrollPane 内含 4 个 TitledPane 可折叠录入面板，
- * 每个面板内部为响应式 GridPane（窗口 &gt;1200 三列 / 800-1200 两列 / &lt;800 单列）。
- * 实时 BMI（FR-03）/ 体脂率（FR-04）计算；保存多条独立历史记录；
- * 支持加载并修改历史旧记录（loadRecord）；保存 / 修改经 ToastBar 反馈并联动刷新首页。
+ * <p>两列等宽 380px 表单（行间距 22px），顶部实时 BMI 计算卡片（匹配 RGB 规范），
+ * 顶部横向 3 个分支按钮（照片 / 报告 / 设置）作为唯一入口；
+ * 保存 → History，AI → AiAnalysis；编辑模式通过 loadRecord 回填。
+ * 身高/年龄/性别由 UserSession 携带（用户信息页录入），本页聚焦体重与围度/体征。
  */
-public class InputView extends BorderPane implements LangChangeListener {
+public class InputView extends StackPane implements LangChangeListener {
 
+    private final User user;
     private final long userId;
     private final RecordController recordController;
+    @SuppressWarnings("unused")
     private final ChartController chartController;
-    private final Runnable onDataChanged;
-    private final ToastBar toast;
+    private final BodyRecord editing;
+    private final ToastBar toast = new ToastBar();
 
-    private final TextField tfHeight = StyleFactory.numberField("input.height");
     private final TextField tfWeight = StyleFactory.numberField("input.weight");
-    private final TextField tfAge = StyleFactory.numberField("input.age");
-    private final ComboBox<String> cbGender = StyleFactory.comboBox();
-    private final DatePicker dpTime = StyleFactory.datePicker();
-    private final Label errHeight = new Label();
-    private final Label errWeight = new Label();
-    private final Label errAge = new Label();
-
     private final TextField tfWaist = StyleFactory.numberField("input.waist");
     private final TextField tfHip = StyleFactory.numberField("input.hip");
-    private final TextField tfWrist = StyleFactory.numberField("input.wrist");
+    private final TextField tfBodyFat = StyleFactory.numberField("input.bodyfat");
     private final TextField tfNeck = StyleFactory.numberField("input.neck");
+    private final TextField tfWrist = StyleFactory.numberField("input.wrist");
     private final TextField tfSys = StyleFactory.numberField("input.systolic");
     private final TextField tfDia = StyleFactory.numberField("input.diastolic");
     private final TextField tfHr = StyleFactory.numberField("input.heart");
     private final TextField tfVisc = StyleFactory.numberField("input.visceral");
+    private final DatePicker dpTime = StyleFactory.datePicker();
 
-    private final List<javafx.scene.control.CheckBox> diseaseBoxes = new ArrayList<>();
-    private final javafx.scene.control.CheckBox cbNone = StyleFactory.checkBox("input.disease.none");
+    private final Label errWeight = new Label();
 
-    private final Label lblResult = new Label();
-    private final Label status = new Label();
+    // 实时 BMI 卡片
+    private final Label bmiStatusLabel = new Label();
+    private final Label statusTag = new Label();
+    private final Label bmiValueLabel = new Label();
+    private final Label bmiGradeLabel = new Label();
+    private final Label subTextLabel = new Label();
 
+    // 顶部 3 个分支按钮 + 主操作
+    private final Button btnPhoto = new Button();
+    private final Button btnReport = new Button();
+    private final Button btnSettings = new Button();
     private final Button btnSave = StyleFactory.primaryButton("input.save");
-    private final Button btnLoad = StyleFactory.secondaryButton("input.loadHistory");
-    private final Button btnModify = StyleFactory.secondaryButton("input.modify");
+    private final Button btnAi = StyleFactory.secondaryButton("input.aiAnalysis");
 
-    private BodyRecord selectedRecord = null;
     private static final DateTimeFormatter FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
-    public InputView(long userId, RecordController recordController, ChartController chartController,
-                     Runnable onDataChanged, ToastBar toast) {
-        this.userId = userId;
+    public InputView(User user, RecordController recordController, ChartController chartController, BodyRecord editing) {
+        this.user = user;
+        this.userId = user != null ? user.getId() : -1L;
         this.recordController = recordController;
         this.chartController = chartController;
-        this.onDataChanged = onDataChanged;
-        this.toast = toast;
-        buildTop();
-        buildCenter();
+        this.editing = editing;
+
+        BorderPane bp = new BorderPane();
+        bp.setTop(buildTop());
+        bp.setCenter(buildCenter());
+        bp.setBottom(buildBottom());
+
+        getChildren().addAll(bp, toast);
+        StackPane.setAlignment(toast, Pos.TOP_CENTER);
+
+        if (editing != null) {
+            loadRecord(editing);
+        }
         installRealtime();
         AppConfig.getInstance().addListener(this);
     }
 
-    // ---------------- 顶部：标题 + 结果 + 操作 ----------------
-    private void buildTop() {
+    // ---------------- 顶部：标题 + 3 分支按钮 + 实时 BMI 卡片 ----------------
+    private Node buildTop() {
         Label title = StyleFactory.title("input.title");
-        HBox ops = new HBox(10, btnSave, btnLoad, btnModify);
-        VBox top = new VBox(8, title, lblResult, ops, status);
-        top.setPadding(new Insets(12));
-        setTop(top);
+        HBox titleArea = new HBox(title);
+        titleArea.setAlignment(Pos.CENTER_LEFT);
 
-        btnSave.setOnAction(e -> doSave());
-        btnLoad.setOnAction(e -> loadHistoryOptions());
-        btnModify.setOnAction(e -> doModify());
+        btnPhoto.getStyleClass().addAll("bmi-btn", "bmi-btn-secondary");
+        btnReport.getStyleClass().addAll("bmi-btn", "bmi-btn-secondary");
+        btnSettings.getStyleClass().addAll("bmi-btn", "bmi-btn-secondary");
+        btnPhoto.setOnAction(e -> PageNavigator.toPhoto(user));
+        btnReport.setOnAction(e -> PageNavigator.toReport(user));
+        btnSettings.setOnAction(e -> PageNavigator.toSettings(user));
+
+        HBox branchBox = new HBox(10, btnPhoto, btnReport, btnSettings);
+        branchBox.setAlignment(Pos.CENTER_LEFT);
+
+        HBox left = new HBox(16, titleArea, branchBox);
+        left.setAlignment(Pos.CENTER_LEFT);
+        HBox.setHgrow(left, Priority.ALWAYS);
+
+        VBox bmiCard = buildFloatingBmiCard();
+
+        HBox topBar = new HBox(20, left, bmiCard);
+        topBar.setPadding(new Insets(12, 24, 12, 24));
+        topBar.setAlignment(Pos.CENTER_LEFT);
+        topBar.setStyle("-fx-background-color:-bmi-panel-solid; -fx-border-color:-bmi-border;"
+                + "-fx-border-width:0 0 1 0;");
+        return topBar;
     }
 
-    // ---------------- 中心：折叠面板 + 响应式栅格 ----------------
-    private void buildCenter() {
-        cbGender.getItems().addAll(I18nUtil.t("input.male"), I18nUtil.t("input.female"));
-        cbGender.setValue(I18nUtil.t("input.male"));
-        dpTime.setValue(LocalDate.now());
-        for (Label l : new Label[]{errHeight, errWeight, errAge}) {
-            l.setStyle("-fx-text-fill:#f44336; -fx-font-size:11px;");
-        }
+    private VBox buildFloatingBmiCard() {
+        VBox card = new VBox(8);
+        card.getStyleClass().add("bmi-floating-card");
+        card.setAlignment(Pos.CENTER_LEFT);
+        card.setMinWidth(220);
 
-        TitledPane tpBasic = StyleFactory.titledPane("input.basic",
-                responsiveGrid(row("input.height", tfHeight, errHeight),
-                        row("input.weight", tfWeight, errWeight),
-                        row("input.age", tfAge, errAge),
-                        row("input.gender", cbGender, null),
-                        row("input.time", dpTime, null)));
-        TitledPane tpCircum = StyleFactory.titledPane("input.circum",
-                responsiveGrid(row("input.waist", tfWaist, null),
-                        row("input.hip", tfHip, null),
-                        row("input.wrist", tfWrist, null),
-                        row("input.neck", tfNeck, null)));
-        TitledPane tpVital = StyleFactory.titledPane("input.vital",
-                responsiveGrid(row("input.systolic", tfSys, null),
-                        row("input.diastolic", tfDia, null),
-                        row("input.heart", tfHr, null),
-                        row("input.visceral", tfVisc, null)));
+        bmiStatusLabel.getStyleClass().add("bmi-floating-header");
+        statusTag.getStyleClass().add("bmi-floating-status-tag");
+        bmiValueLabel.getStyleClass().add("bmi-floating-bmi-value");
+        subTextLabel.getStyleClass().add("bmi-floating-subtext");
+        bmiGradeLabel.getStyleClass().add("bmi-floating-grade-label");
 
-        // 疾病勾选（选填，互斥「无」）
-        for (String key : new String[]{"input.disease.hypertension", "input.disease.diabetes",
-                "input.disease.heart", "input.disease.hyperlipid", "input.disease.fattyliver"}) {
-            javafx.scene.control.CheckBox cb = StyleFactory.checkBox(key);
-            cb.setOnAction(e -> onDiseaseToggle(cb, true));
-            diseaseBoxes.add(cb);
-        }
-        cbNone.setOnAction(e -> onDiseaseToggle(cbNone, false));
-        VBox diseaseBox = new VBox(6, diseaseBoxes.toArray(new javafx.scene.control.CheckBox[0]));
-        diseaseBox.getChildren().add(cbNone);
-        TitledPane tpDisease = StyleFactory.titledPane("input.disease", diseaseBox);
+        HBox headerRow = new HBox(8, bmiStatusLabel, statusTag);
+        headerRow.setAlignment(Pos.CENTER_LEFT);
+        card.getChildren().addAll(headerRow, bmiValueLabel, subTextLabel, bmiGradeLabel);
+        return card;
+    }
 
-        javafx.scene.control.Accordion acc = new javafx.scene.control.Accordion(tpBasic, tpCircum, tpVital, tpDisease);
-        acc.setExpandedPane(tpBasic);
-        StyleFactory.styleAccordion(acc);
+    // ---------------- 中心：两列等宽 380px 表单 ----------------
+    private Node buildCenter() {
+        errWeight.setStyle("-fx-text-fill:rgb(220,40,40); -fx-font-size:11px;");
 
-        ScrollPane scroll = new ScrollPane(acc);
+        VBox leftCol = new VBox(22,
+                labeledField("input.weight", tfWeight, errWeight, true),
+                labeledField("input.waist", tfWaist, null, false),
+                labeledField("input.hip", tfHip, null, false),
+                labeledField("input.bodyfat", tfBodyFat, null, false),
+                labeledField("input.neck", tfNeck, null, false));
+        leftCol.setPrefWidth(380);
+        leftCol.setMinWidth(380);
+        leftCol.setMaxWidth(380);
+
+        VBox rightCol = new VBox(22,
+                labeledField("input.wrist", tfWrist, null, false),
+                labeledField("input.systolic", tfSys, null, false),
+                labeledField("input.diastolic", tfDia, null, false),
+                labeledField("input.heart", tfHr, null, false),
+                labeledField("input.visceral", tfVisc, null, false));
+        rightCol.setPrefWidth(380);
+        rightCol.setMinWidth(380);
+        rightCol.setMaxWidth(380);
+
+        HBox cols = new HBox(40, leftCol, rightCol);
+        cols.setAlignment(Pos.CENTER);
+        cols.setPadding(new Insets(16, 0, 8, 0));
+
+        VBox dateRow = labeledField("input.time", dpTime, null, false);
+        dateRow.setMaxWidth(380);
+        dateRow.setAlignment(Pos.CENTER_LEFT);
+
+        VBox form = new VBox(22, cols, new HBox(40, dateRow));
+        form.setAlignment(Pos.TOP_CENTER);
+        form.setPadding(new Insets(8, 24, 8, 24));
+
+        ScrollPane scroll = new ScrollPane(form);
         scroll.setFitToWidth(true);
         scroll.setPadding(new Insets(8));
-        setCenter(scroll);
+        return scroll;
     }
 
-    /** 标准化录入行：标签 + 控件 + 错误提示（选填项 err 为 null）。 */
-    private VBox row(String key, javafx.scene.Node node, Label err) {
-        VBox b = new VBox(2, new Label(I18nUtil.t(key)), node);
-        if (err != null) {
-            b.getChildren().add(err);
+    /** 标准录入行：标签 + 控件 + 错误提示（选填项 err 为 null）。 */
+    private VBox labeledField(String key, javafx.scene.Node node, Label err, boolean required) {
+        Label label = new Label(I18nUtil.t(key));
+        label.setStyle("-fx-font-size:13px; -fx-text-fill:rgb(60,60,60);");
+        HBox labelBox = new HBox(6, label);
+        if (required) {
+            Label star = new Label("*");
+            star.setStyle("-fx-text-fill:rgb(220,40,40); -fx-font-weight:bold; -fx-font-size:13px;");
+            labelBox.getChildren().add(star);
+        } else {
+            Label opt = new Label(I18nUtil.t("input.optional"));
+            opt.setStyle("-fx-font-size:11px; -fx-text-fill:rgb(150,150,150);");
+            labelBox.getChildren().add(opt);
         }
-        return b;
+        if (node instanceof TextField) ((TextField) node).setMaxWidth(Double.MAX_VALUE);
+        if (node instanceof DatePicker) ((DatePicker) node).setMaxWidth(Double.MAX_VALUE);
+        VBox cell = new VBox(3, labelBox, node);
+        if (err != null) cell.getChildren().add(err);
+        return cell;
     }
 
-    /** 构建响应式栅格（3/2/1 列自适应）。 */
-    private GridPane responsiveGrid(VBox... rows) {
-        GridPane grid = new GridPane();
-        grid.setPadding(new Insets(10));
-        List<javafx.scene.Node> cells = new ArrayList<>();
-        for (VBox r : rows) {
-            cells.add(r);
-        }
-        Responsive.bind(grid, cells);
-        return grid;
-    }
+    // ---------------- 底部：保存 + AI ----------------
+    private Node buildBottom() {
+        btnSave.setPrefWidth(160);
+        btnSave.setOnAction(e -> doSave());
+        btnAi.setPrefWidth(160);
+        btnAi.setOnAction(e -> PageNavigator.toAiAnalysis(user));
 
-    private void onDiseaseToggle(javafx.scene.control.CheckBox self, boolean isDisease) {
-        if (self.isSelected() && isDisease) {
-            cbNone.setSelected(false);
-        } else if (self.isSelected() && !isDisease) {
-            diseaseBoxes.forEach(cb -> cb.setSelected(false));
-        }
+        HBox bar = new HBox(16, btnSave, btnAi);
+        bar.setAlignment(Pos.CENTER);
+        bar.setPadding(new Insets(14, 24, 18, 24));
+        bar.setStyle("-fx-background-color:-bmi-panel-solid; -fx-border-color:-bmi-border;"
+                + "-fx-border-width:1 0 0 0;");
+        return bar;
     }
 
     // ---------------- 实时 BMI / 体脂率 ----------------
     private void installRealtime() {
         Runnable calc = this::recalc;
-        tfHeight.textProperty().addListener((o, a, b) -> calc.run());
         tfWeight.textProperty().addListener((o, a, b) -> calc.run());
-        tfAge.textProperty().addListener((o, a, b) -> calc.run());
-        cbGender.valueProperty().addListener((o, a, b) -> calc.run());
+    }
+
+    private double profileHeight() {
+        UserSession s = UserSession.getInstance();
+        if (s.getHeight() != null && s.getHeight() > 0) return s.getHeight();
+        if (editing != null && editing.getHeight() > 0) return editing.getHeight();
+        return 0;
     }
 
     private void recalc() {
-        Double h = num(tfHeight), w = num(tfWeight);
+        Double h = profileHeight() > 0 ? profileHeight() : null;
+        Double w = num(tfWeight);
+        bmiStatusLabel.setText(I18nUtil.t("input.bmiRealtime"));
+        statusTag.setText(I18nUtil.t("input.statusActive"));
+        subTextLabel.setText(I18nUtil.t("input.calculating"));
         if (h == null || h <= 0 || w == null || w <= 0) {
-            lblResult.setText("");
+            bmiValueLabel.setText("");
+            bmiGradeLabel.setText("");
             return;
         }
         double bmi = Math.round((w / ((h / 100) * (h / 100))) * 10.0) / 10.0;
-        StringBuilder sb = new StringBuilder(I18nUtil.t("input.result.bmi", bmi, gradeName(bmi)));
-        Double age = num(tfAge);
-        int gender = I18nUtil.t("input.male").equals(cbGender.getValue()) ? 1 : 0;
-        if (age != null && age >= 1 && age <= 120) {
-            double bf = Math.round((1.2 * bmi + 0.23 * age - 10.8 * gender - 5.4) * 10.0) / 10.0;
-            sb.append("   ").append(I18nUtil.t("input.result.bodyfat", bf));
-        }
-        lblResult.setText(sb.toString());
-        lblResult.setStyle("-fx-text-fill:" + ThemeConstant.bmiGradeColor(bmi) + "; -fx-font-weight:bold;");
+        bmiValueLabel.setText("BMI " + bmi);
+        String gradeText = gradeName(bmi);
+        String gradeColor = ThemeConstant.bmiGradeColor(bmi);
+        bmiGradeLabel.setText(gradeText);
+        bmiGradeLabel.setStyle("-fx-font-size:14px; -fx-font-weight:normal; -fx-text-fill:"
+                + gradeColor + "; -fx-padding:4 0 0 0;");
+        bmiValueLabel.setStyle("-fx-font-size:32px; -fx-font-weight:bold; -fx-text-fill:" + gradeColor + ";");
     }
 
-    // ---------------- 历史加载 / 编辑 ----------------
-    private void loadHistoryOptions() {
-        List<BodyRecord> list = recordController.queryRecords(userId, null, null);
-        if (list.isEmpty()) {
-            toast.warning(I18nUtil.t("common.emptyHint"));
-            return;
-        }
-        // 简单起见，弹出一个选择对话框
-        javafx.scene.control.ChoiceDialog<BodyRecord> dlg =
-                new javafx.scene.control.ChoiceDialog<>(list.get(0), list);
-        dlg.setTitle(I18nUtil.t("input.loadHistory"));
-        dlg.setHeaderText(null);
-        dlg.setContentText(I18nUtil.t("input.loadHistory"));
-        dlg.showAndWait().ifPresent(this::loadRecord);
-    }
-
-    /** 将一条历史记录回填表单（供「修改选中记录」使用）。 */
+    // ---------------- 编辑回填 ----------------
     public void loadRecord(BodyRecord r) {
-        selectedRecord = r;
-        tfHeight.setText(String.valueOf(r.getHeight()));
-        tfWeight.setText(String.valueOf(r.getWeight()));
-        tfAge.setText(String.valueOf(r.getAge()));
-        cbGender.setValue(r.getGender() == 1 ? I18nUtil.t("input.male") : I18nUtil.t("input.female"));
-        if (r.getMeasureTime() != null) {
-            dpTime.setValue(r.getMeasureTime().toLocalDate());
-        }
+        if (r.getHeight() > 0) tfWeight.requestFocus();
+        tfWeight.setText(r.getWeight() > 0 ? String.valueOf(r.getWeight()) : "");
         tfWaist.setText(fmt(r.getWaistCircum()));
         tfHip.setText(fmt(r.getHipCircum()));
-        tfWrist.setText(fmt(r.getWristCircum()));
+        tfBodyFat.setText(fmt(r.getBodyFat()));
         tfNeck.setText(fmt(r.getNeckCircum()));
+        tfWrist.setText(fmt(r.getWristCircum()));
         tfSys.setText(fmt(r.getSystolicBp()));
         tfDia.setText(fmt(r.getDiastolicBp()));
         tfHr.setText(fmt(r.getHeartRate()));
         tfVisc.setText(fmt(r.getVisceralFat()));
-        syncDiseases(r.getDiseases());
+        if (r.getMeasureTime() != null) {
+            dpTime.setValue(r.getMeasureTime().toLocalDate());
+        }
         recalc();
     }
 
-    private void syncDiseases(String diseases) {
-        diseaseBoxes.forEach(cb -> cb.setSelected(false));
-        cbNone.setSelected(true);
-        if (diseases != null && !diseases.isEmpty()) {
-            cbNone.setSelected(false);
-            for (javafx.scene.control.CheckBox cb : diseaseBoxes) {
-                if (diseases.contains(cb.getText())) {
-                    cb.setSelected(true);
-                }
-            }
-        }
-    }
-
-    private String gatherDiseases() {
-        List<String> sel = diseaseBoxes.stream()
-                .filter(javafx.scene.control.CheckBox::isSelected)
-                .map(javafx.scene.control.CheckBox::getText).collect(Collectors.toList());
-        return sel.isEmpty() ? null : String.join(",", sel);
-    }
-
-    // ---------------- 保存 / 修改 ----------------
+    // ---------------- 保存 ----------------
     private void doSave() {
-        Double h = num(tfHeight), w = num(tfWeight), age = num(tfAge);
-        String hErr = validate(h, 50, 250, "validate.height");
-        String wErr = validate(w, 10, 300, "validate.weight");
-        String aErr = validate(age, 1, 120, "validate.age");
-        clearErr(errHeight, tfHeight);
-        clearErr(errWeight, tfWeight);
-        clearErr(errAge, tfAge);
-        if (hErr != null) { markErr(errHeight, tfHeight, hErr); return; }
-        if (wErr != null) { markErr(errWeight, tfWeight, wErr); return; }
-        if (aErr != null) { markErr(errAge, tfAge, aErr); return; }
-
-        int gender = I18nUtil.t("input.male").equals(cbGender.getValue()) ? 1 : 0;
-        BodyRecord r = recordController.createRecord(userId, h, w, age.intValue(), gender, measureTimeStr());
-        if (r == null) {
+        Double w = num(tfWeight);
+        Double h = profileHeight() > 0 ? profileHeight() : null;
+        if (h == null || h <= 0) {
             toast.error(I18nUtil.t("input.savedEmpty"));
             return;
         }
-        applyExtensions(r);
-        recordController.updateRecord(r);
-        toast.success(I18nUtil.t("input.savedOk", 1));
-        onDataChanged.run();
-    }
+        if (w == null || w <= 0) {
+            StyleFactory.markError(tfWeight, errWeight, "validate.required");
+            toast.error(I18nUtil.t("validate.required"));
+            return;
+        }
+        StyleFactory.clearError(tfWeight, errWeight);
 
-    private void doModify() {
-        if (selectedRecord == null) {
-            toast.warning(I18nUtil.t("input.noneSelected"));
-            return;
+        int age = UserSession.getInstance().getAge() != null ? UserSession.getInstance().getAge() : 0;
+        int gender = "M".equals(UserSession.getInstance().getGender()) ? 1 : 0;
+
+        BodyRecord r;
+        if (editing == null) {
+            r = recordController.createRecord(userId, h, w, age, gender, measureTimeStr());
+            if (r == null) {
+                toast.error(I18nUtil.t("input.savedEmpty"));
+                return;
+            }
+            applyExtensions(r);
+            recordController.updateRecord(r);
+        } else {
+            r = new BodyRecord();
+            r.setId(editing.getId());
+            r.setUserId(userId);
+            r.setAge(age);
+            r.setGender(gender);
+            r.setMeasureTime(editing.getMeasureTime());
+            r.setHeight(h);
+            r.setWeight(w);
+            applyExtensions(r);
+            recordController.updateRecord(r);
         }
-        Double h = num(tfHeight), w = num(tfWeight), age = num(tfAge);
-        if (validate(h, 50, 250, "validate.height") != null
-                || validate(w, 10, 300, "validate.weight") != null
-                || validate(age, 1, 120, "validate.age") != null) {
-            toast.error(I18nUtil.t("input.savedEmpty"));
-            return;
-        }
-        BodyRecord r = new BodyRecord();
-        r.setId(selectedRecord.getId());
-        r.setUserId(userId);
-        int gender = I18nUtil.t("input.male").equals(cbGender.getValue()) ? 1 : 0;
-        r.setAge(age.intValue());
-        r.setGender(gender);
-        r.setMeasureTime(selectedRecord.getMeasureTime());
-        applyExtensions(r);
-        r.setHeight(h);
-        r.setWeight(w);
-        recordController.updateRecord(r);
         toast.success(I18nUtil.t("input.savedOk", 1));
-        onDataChanged.run();
+        PageNavigator.toHistory(user);
     }
 
     private void applyExtensions(BodyRecord r) {
         r.setWaistCircum(num(tfWaist));
         r.setHipCircum(num(tfHip));
-        r.setWristCircum(num(tfWrist));
+        r.setBodyFat(num(tfBodyFat));
         r.setNeckCircum(num(tfNeck));
+        r.setWristCircum(num(tfWrist));
         r.setSystolicBp(intNum(tfSys));
         r.setDiastolicBp(intNum(tfDia));
         r.setHeartRate(intNum(tfHr));
         r.setVisceralFat(intNum(tfVisc));
-        r.setDiseases(gatherDiseases());
     }
 
-    // ---------------- 校验 / 解析辅助 ----------------
+    // ---------------- 辅助 ----------------
     private Double num(TextField tf) {
         String s = tf.getText().trim();
-        if (s.isEmpty()) {
-            return null;
-        }
+        if (s.isEmpty()) return null;
         try {
             return Double.parseDouble(s);
         } catch (NumberFormatException e) {
@@ -350,31 +350,10 @@ public class InputView extends BorderPane implements LangChangeListener {
         return d == null ? null : d.intValue();
     }
 
-    private String validate(Double v, double min, double max, String rangeKey) {
-        if (v == null) {
-            return "validate.required";
-        }
-        if (v < 0) {
-            return "validate.negative";
-        }
-        if (v < min || v > max) {
-            return rangeKey;
-        }
-        return null;
-    }
-
-    private void markErr(Label err, TextField field, String key) {
-        StyleFactory.markError(field, err, key);
-    }
-
-    private void clearErr(Label err, TextField field) {
-        StyleFactory.clearError(field, err);
-    }
-
     private String measureTimeStr() {
         LocalDate d = dpTime.getValue();
         if (d == null) {
-            return null;
+            return FMT.format(LocalDateTime.now());
         }
         return FMT.format(LocalDateTime.of(d, java.time.LocalTime.MIN));
     }
@@ -388,30 +367,19 @@ public class InputView extends BorderPane implements LangChangeListener {
     }
 
     private String gradeName(double bmi) {
-        if (bmi < 18.5) {
-            return I18nUtil.t("grade.thin");
-        }
-        if (bmi < 24) {
-            return I18nUtil.t("grade.normal");
-        }
-        if (bmi < 28) {
-            return I18nUtil.t("grade.overweight");
-        }
+        if (bmi < 18.5) return I18nUtil.t("grade.thin");
+        if (bmi < 24) return I18nUtil.t("grade.normal");
+        if (bmi < 28) return I18nUtil.t("grade.overweight");
         return I18nUtil.t("grade.obese");
     }
 
     // ---------------- 语言刷新 ----------------
     private void refreshTexts() {
-        cbGender.getItems().setAll(I18nUtil.t("input.male"), I18nUtil.t("input.female"));
+        btnPhoto.setText(I18nUtil.t("input.photo"));
+        btnReport.setText(I18nUtil.t("input.report"));
+        btnSettings.setText(I18nUtil.t("input.settings"));
         btnSave.setText(I18nUtil.t("input.save"));
-        btnLoad.setText(I18nUtil.t("input.loadHistory"));
-        btnModify.setText(I18nUtil.t("input.modify"));
-        for (int i = 0; i < diseaseBoxes.size(); i++) {
-            String[] keys = {"input.disease.hypertension", "input.disease.diabetes",
-                    "input.disease.heart", "input.disease.hyperlipid", "input.disease.fattyliver"};
-            diseaseBoxes.get(i).setText(I18nUtil.t(keys[i]));
-        }
-        cbNone.setText(I18nUtil.t("input.disease.none"));
+        btnAi.setText(I18nUtil.t("input.aiAnalysis"));
         recalc();
     }
 

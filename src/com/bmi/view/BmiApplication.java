@@ -10,6 +10,7 @@ import com.bmi.controller.UserController;
 import com.bmi.i18n.AppConfig;
 import com.bmi.i18n.I18n;
 import com.bmi.model.User;
+import com.bmi.model.BodyRecord;
 import com.bmi.view.util.MockUserDao;
 import com.bmi.view.util.PageNavigator;
 import com.bmi.view.util.UserSession;
@@ -19,12 +20,11 @@ import javafx.scene.Scene;
 import javafx.stage.Stage;
 
 /**
- * BMI 桌面应用启动器（重写启动链路：注册 → 登录 → 体质录入 → 主界面）。
+ * BMI 桌面应用启动器（线性跳转链路：Login → Register / UserInfoInput → Input ↔ History ↔ AiAnalysis）。
  *
- * <p>构建全部控制器并装配（UserDao=InMemory，RecordDao=JdbcRecordDao）；
- * 启动时强制初始化默认主题清爽蓝 FRESH_BLUE（页面底色纯白），语言沿用持久化偏好；
- * 首屏为 RegisterView，经 {@link PageNavigator} 全局路由在三页间切换。
- * 退出登录回到 LoginView。
+ * <p>构建全部控制器并装配（UserDao=InMemory 或 Mock，RecordDao=JdbcRecordDao）；
+ * 启动时加载持久化语言/主题（缺省中文 ZH / 清爽蓝 fresh）；
+ * 首屏为 LoginView，经 {@link PageNavigator} 全局路由在各页间切换。退出登录回到 LoginView。
  *
  * <p>运行需 JavaFX SDK（javafx.controls / javafx.graphics）位于模块路径；
  * 全局样式表 styles.css 由 PageNavigator 注入每个 Scene 并应用当前主题。
@@ -40,7 +40,7 @@ public class BmiApplication extends Application implements PageNavigator.Navigat
                     : new com.bmi.model.db.InMemoryUserDao());
     private final SettingController settingController = new SettingController();
 
-    // 以下重控制器延迟到进入主界面（buildMain）时才构造，避免启动期不必要的后端耦合与阻塞
+    // 以下重控制器延迟到进入主业务（buildInput/History/Ai/Photo/Report）时才构造
     private RecordController recordController;
     private ChartController chartController;
     private AiController aiController;
@@ -51,20 +51,18 @@ public class BmiApplication extends Application implements PageNavigator.Navigat
     public void start(Stage stage) {
         System.out.println("[BMI] BmiApplication.start: entering start(), FX thread="
                 + javafx.application.Platform.isFxApplicationThread());
-        // 启动即加载持久化语言/主题（缺省中文 ZH / 清爽蓝 fresh），重启保留上次选择；
-        // 不再强制覆盖，解决「下拉切换被单向写回、重启丢失」问题。
         AppConfig.getInstance().loadConfig();
         System.out.println("[BMI] lang/theme initialized: lang="
                 + AppConfig.getInstance().getLang() + " theme=" + AppConfig.getInstance().getTheme());
 
         stage.setTitle(I18n.t("app.title"));
         PageNavigator.init(stage, this, 1000, 700);
-        System.out.println("[BMI] first screen -> RegisterView (PageNavigator will call stage.show())");
-        PageNavigator.toRegister();
+        System.out.println("[BMI] first screen -> LoginView (PageNavigator will call stage.show())");
+        PageNavigator.toLogin();
         System.out.println("[BMI] start() returning, stage.isShowing=" + stage.isShowing());
     }
 
-    /** 进入主界面时才装配重控制器（延迟构造，减少启动开销）。 */
+    /** 进入主业务时才装配重控制器（延迟构造，减少启动开销）。 */
     private void ensureMainControllers() {
         if (recordController == null) {
             recordController = new RecordController(recordDao);
@@ -94,14 +92,44 @@ public class BmiApplication extends Application implements PageNavigator.Navigat
     }
 
     @Override
-    public Parent buildMain(User user) {
+    public Parent buildInput(User user) {
         ensureMainControllers();
-        return new MainView(user, userController, recordController, chartController,
-                aiController, photoController, reportController, settingController,
-                u -> {
-                    UserSession.getInstance().clear();
-                    PageNavigator.toLogin();
-                });
+        return new InputView(user, recordController, chartController, null);
+    }
+
+    @Override
+    public Parent buildInputEdit(User user, BodyRecord record) {
+        ensureMainControllers();
+        return new InputView(user, recordController, chartController, record);
+    }
+
+    @Override
+    public Parent buildHistory(User user) {
+        ensureMainControllers();
+        return new HistoryView(user, recordController);
+    }
+
+    @Override
+    public Parent buildAiAnalysis(User user) {
+        ensureMainControllers();
+        return new AiAnalysisView(aiController, user);
+    }
+
+    @Override
+    public Parent buildPhoto(User user) {
+        ensureMainControllers();
+        return new PhotoView(photoController, user);
+    }
+
+    @Override
+    public Parent buildReport(User user) {
+        ensureMainControllers();
+        return new ReportView(reportController, user);
+    }
+
+    @Override
+    public Parent buildSettings(User user) {
+        return new SettingsView(user, settingController);
     }
 
     public static void main(String[] args) {

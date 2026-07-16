@@ -4,66 +4,81 @@
  * ============================================================ */
 
 .root {
-    -bmi-bg: #ffffff;
-    -bmi-fg: #222222;
-    -bmi-fg-secondary: #4e5969;
-    -bmi-panel: #f8f9fa;
-    -bmi-panel-solid: #ffffff;
-    -bmi-border: #e5e7eb;
-    -bmi-muted: #86909c;
-    -bmi-primary: #4096ff;
-    -bmi-primary-light: #e8f3ff;
-    -bmi-primary-dark: #2979ff;
-    -bmi-success: #7cd9b5;
-    -bmi-success-bg: #e8ffef;
-    -bmi-warning: #faad14;
-    -bmi-warning-bg: #fff7e8;
-    -bmi-danger: #f76b6c;
-    -bmi-danger-bg: #ffece8;
-    /* Grade colors per spec */
-    -bmi-grade-thin: #4096ff;
-    -bmi-grade-normal: #52c41a;
-    -bmi-grade-overweight: #faad14;
-    -bmi-grade-obese: #f76b6c;
-    -fx-background-color: -bmi-bg;
-    -fx-font-family: "Microsoft YaHei", "PingFang SC", "Segoe UI", system-ui, sans-serif;
-    -fx-font-size: 13px;
-}
+        -bmi-bg: rgb(248,248,250);
+        -bmi-fg: rgb(30,30,30);
+        -bmi-fg-secondary: rgb(60,60,60);
+        -bmi-panel: rgb(242,242,245);
+        -bmi-panel-solid: rgb(255,255,255);
+        -bmi-border: rgb(200,200,200);
+        -bmi-muted: rgb(150,150,150);
+        -bmi-primary: rgb(45,140,220);
+        -bmi-primary-light: rgb(225,238,250);
+        -bmi-primary-dark: rgb(35,110,180);
+        -bmi-success: rgb(40,160,60);
+        -bmi-success-bg: rgb(232,245,235);
+        -bmi-warning: rgb(240,170,20);
+        -bmi-warning-bg: rgb(252,243,224);
+        -bmi-danger: rgb(220,40,40);
+        -bmi-danger-bg: rgb(250,230,230);
+        -bmi-grade-thin: rgb(45,140,220);
+        -bmi-grade-normal: rgb(40,160,60);
+        -bmi-grade-overweight: rgb(240,170,20);
+        -bmi-grade-obese: rgb(220,40,40);
+        -fx-background-color: -bmi-bg;
+        -fx-font-family: "Microsoft YaHei", "PingFang SC", "Segoe UI", system-ui, sans-serif;
+        -fx-font-size: 13px;
+    }
 .label { -fx-text-fill: -bmi-fg; }
 
 /* ==================== Theme Overrides ==================== */
 .theme-fresh {
-    -bmi-bg: #ffffff; -bmi-fg: #222222; -bmi-fg-secondary: #4e5969;
-    -bmi-panel: #f8f9fa; -bmi-panel-solid: #ffffff; -bmi-border: #e5e7eb;
-    -bmi-muted: #86909c;
-    -bmi-primary: #4096ff; -bmi-primary-light: #e8f3ff; -bmi-primary-dark: #2979ff;
-    -bmi-success: #7cd9b5; -bmi-success-bg: #e8ffef;
-    -bmi-warning: #faad14; -bmi-warning-bg: #fff7e8;
-    -bmi-danger: #f76b6c; -bmi-danger-bg: #ffece8;
-}
+        -bmi-bg: rgb(248,248,250);
+        -bmi-fg: rgb(30,30,30);
+        -bmi-fg-secondary: rgb(60,60,60);
+        -bmi-panel: rgb(242,242,245);
+        -bmi-panel-solid: rgb(255,255,255);
+        -bmi-border: rgb(200,200,200);
+        -bmi-muted: rgb(150,150,150);
+        -bmi-primary: rgb(45,140,220);
+        -bmi-primary-light: rgb(225,238,250);
+        -bmi-primary-dark: rgb(35,110,180);
+        -bmi-success: rgb(40,160,60);
+        -bmi-success-bg: rgb(232,245,235);
+        -bmi-warning: rgb(240,170,20);
+        -bmi-warning-bg: rgb(252,243,224);
+        -bmi-danger: rgb(220,40,40);
+        -bmi-danger-bg: rgb(250,230,230);
+        -bmi-grade-thin: rgb(45,140,220);
+        -bmi-grade-normal: rgb(40,160,60);
+        -bmi-grade-overweight: rgb(240,170,20);
+        -bmi-grade-obese: rgb(220,40,40);
+        -fx-background-color: -bmi-bg;
+        -fx-font-family: "Microsoft YaHei", "PingFang SC", "Segoe UI", system-ui, sans-serif;
+        -fx-font-size: 13px;
+    }
 .theme-eye {
-    -bmi-bg: #f0f1f5; -bmi-fg: #2a2f38; -bmi-fg-secondary: #5a6270;
-    -bmi-panel: #e4e6ea; -bmi-panel-solid: #fafafc; -bmi-border: #c9cdd4;
-    -bmi-muted: #707784;
-    -bmi-primary: #638fc9; -bmi-primary-light: #eaf0fa; -bmi-primary-dark: #4a7ab8;
-    -bmi-success: #6ab89a; -bmi-success-bg: #eaf6f0;
-    -bmi-warning: #d4945a; -bmi-warning-bg: #f8f2e8;
-    -bmi-danger: #d96b6c; -bmi-danger-bg: #f8eaea;
+    -bmi-bg: rgb(240,241,245); -bmi-fg: rgb(42,47,56); -bmi-fg-secondary: rgb(90,98,112);
+    -bmi-panel: rgb(228,230,234); -bmi-panel-solid: rgb(250,250,252); -bmi-border: rgb(201,205,212);
+    -bmi-muted: rgb(112,119,132);
+    -bmi-primary: rgb(99,143,201); -bmi-primary-light: rgb(234,240,250); -bmi-primary-dark: rgb(74,122,184);
+    -bmi-success: rgb(106,184,154); -bmi-success-bg: rgb(234,246,240);
+    -bmi-warning: rgb(212,148,90); -bmi-warning-bg: rgb(248,242,232);
+    -bmi-danger: rgb(217,107,108); -bmi-danger-bg: rgb(248,234,234);
 }
 .theme-warm {
-    -bmi-bg: #fffbf2; -bmi-fg: #4a3f35; -bmi-fg-secondary: #7a6b5d;
-    -bmi-panel: #f7efe6; -bmi-panel-solid: #fffdf8; -bmi-border: #ecdcc8;
-    -bmi-muted: #a08a76;
-    -bmi-primary: #5a9fd8; -bmi-primary-light: #eef6fb; -bmi-primary-dark: #3d8bc7;
-    -bmi-success: #7cb88a; -bmi-success-bg: #eff8f1;
-    -bmi-warning: #d4a05a; -bmi-warning-bg: #fdf6ec;
-    -bmi-danger: #d97a6b; -bmi-danger-bg: #f9eeeb;
+    -bmi-bg: rgb(255,251,242); -bmi-fg: rgb(74,63,53); -bmi-fg-secondary: rgb(122,107,93);
+    -bmi-panel: rgb(247,239,230); -bmi-panel-solid: rgb(255,253,248); -bmi-border: rgb(236,220,200);
+    -bmi-muted: rgb(160,138,118);
+    -bmi-primary: rgb(90,159,216); -bmi-primary-light: rgb(238,246,251); -bmi-primary-dark: rgb(61,139,199);
+    -bmi-success: rgb(124,184,138); -bmi-success-bg: rgb(239,248,241);
+    -bmi-warning: rgb(212,160,90); -bmi-warning-bg: rgb(253,246,236);
+    -bmi-danger: rgb(217,122,107); -bmi-danger-bg: rgb(249,238,235);
 }
 .theme-fresh, .theme-eye, .theme-warm { -fx-background-color: -bmi-bg; }
 
 /* ==================== Page Background (light cyan-white gradient) ==================== */
 .bmi-page-bg {
-    -fx-background-color: linear-gradient(to bottom right, #f0faff, #ffffff, #f5fff8);
+    -fx-background-color: linear-gradient(to bottom right, rgb(240,250,255), rgb(255,255,255), rgb(245,255,248));
 }
 
 /* ==================== Top Navigation Bar (Login page) ==================== */
@@ -77,28 +92,28 @@
 .bmi-nav-logo-text {
     -fx-font-size: 22px;
     -fx-font-weight: bold;
-    -fx-text-fill: #52c41a;   /* Green BMI logo */
+    -fx-text-fill: rgb(40,160,60);   /* Green BMI logo */
 }
 .bmi-deco-icon-circle {
     -fx-background-radius: 50%;
     -fx-min-size: 36 36;
     -fx-max-size: 36 36;
     -fx-pref-size: 36 36;
-    -fx-background-color: white;
+    -fx-background-color: rgb(255,255,255);
     -fx-border-color: -bmi-border;
     -fx-border-width: 1;
     -fx-cursor: default;
     -fx-font-size: 16px;
 }
 .bmi-deco-icon-circle-blue {
-    -fx-background-color: #e8f3ff;
-    -fx-border-color: #4096ff;
-    -fx-text-fill: #4096ff;
+    -fx-background-color: rgb(225,238,250);
+    -fx-border-color: rgb(45,140,220);
+    -fx-text-fill: rgb(45,140,220);
 }
 .bmi-deco-icon-circle-green {
-    -fx-background-color: #e8ffef;
-    -fx-border-color: #7cd9b5;
-    -fx-text-fill: #7cd9b5;
+    -fx-background-color: rgb(232,245,235);
+    -fx-border-color: rgb(40,160,60);
+    -fx-text-fill: rgb(40,160,60);
 }
 
 /* ==================== Language Dropdown (top-right) ==================== */
@@ -109,7 +124,7 @@
     -fx-border-width: 1;
     -fx-min-height: 32;
     -fx-pref-height: 32;
-    -fx-background-color: white;
+    -fx-background-color: rgb(255,255,255);
     -fx-font-size: 12px;
 }
 .bmi-lang-combo:focused { -fx-border-color: -bmi-primary; }
@@ -123,7 +138,7 @@
 .bmi-reg-title-large {
     -fx-font-size: 36px;
     -fx-font-weight: bold;
-    -fx-text-fill: #4096ff;
+    -fx-text-fill: rgb(45,140,220);
 }
 .bmi-reg-icons-row {
     -fx-spacing: 12;
@@ -131,13 +146,13 @@
     -fx-alignment: center-left;
 }
 .bmi-hint-bubble {
-    -fx-background-color: #e8f3ff;
+    -fx-background-color: rgb(225,238,250);
     -fx-background-radius: 16;
     -fx-border-radius: 16;
-    -fx-text-fill: #4096ff;
+    -fx-text-fill: rgb(45,140,220);
     -fx-font-size: 11px;
     -fx-padding: 6 14 6 14;
-    -fx-border-color: #bbd8ff;
+    -fx-border-color: rgb(187,216,255);
     -fx-border-width: 1;
 }
 
@@ -159,26 +174,27 @@
     -fx-padding: 10 22 10 22;
     -fx-cursor: hand;
     -fx-border-width: 0;
-    -fx-min-height: 38;
-    -fx-pref-height: 38;
+    -fx-min-height: 36;
+    -fx-pref-height: 36;
+    -fx-min-width: 110;
 }
 .bmi-btn-primary {
     -fx-background-color: -bmi-primary;
-    -fx-text-fill: white;
-    -fx-border-color: transparent;
+    -fx-text-fill: rgb(255,255,255);
+    -fx-border-color: rgba(0,0,0,0);
 }
 .bmi-btn-primary:hover { -fx-background-color: -bmi-primary-dark; }
 .bmi-btn-primary:pressed { -fx-opacity: 0.88; }
 
 .bmi-btn-login-green {
-    -fx-background-color: #7cd9b5;      /* Mint green for LOGIN button */
-    -fx-text-fill: white;
-    -fx-border-color: transparent;
+    -fx-background-color: rgb(40,160,60);      /* Mint rgb(40,160,60) for LOGIN button */
+    -fx-text-fill: rgb(255,255,255);
+    -fx-border-color: rgba(0,0,0,0);
     -fx-background-radius: 8;
     -fx-border-radius: 8;
     -fx-padding: 12 24 12 24;
-    -fx-min-height: 44;
-    -fx-pref-height: 44;
+    -fx-min-height: 36;
+    -fx-pref-height: 36;
     -fx-font-size: 15px;
     -fx-font-weight: bold;
     -fx-cursor: hand;
@@ -186,37 +202,37 @@
 .bmi-btn-login-green:hover { -fx-opacity: 0.88; }
 
 .bmi-btn-register-blue {
-    -fx-background-color: #4096ff;     /* Fresh blue for REGISTER button */
-    -fx-text-fill: white;
-    -fx-border-color: transparent;
+    -fx-background-color: rgb(45,140,220);     /* Fresh rgb(45,140,220) for REGISTER button */
+    -fx-text-fill: rgb(255,255,255);
+    -fx-border-color: rgba(0,0,0,0);
     -fx-background-radius: 8;
     -fx-border-radius: 8;
     -fx-padding: 12 24 12 24;
-    -fx-min-height: 44;
-    -fx-pref-height: 44;
+    -fx-min-height: 36;
+    -fx-pref-height: 36;
     -fx-font-size: 15px;
     -fx-font-weight: bold;
     -fx-cursor: hand;
 }
-.bmi-btn-register-blue:hover { -fx-background-color: #2979ff; }
+.bmi-btn-register-blue:hover { -fx-background-color: rgb(35,110,180); }
 
 .bmi-btn-save-blue {
-    -fx-background-color: #4096ff;
-    -fx-text-fill: white;
-    -fx-border-color: transparent;
+    -fx-background-color: rgb(45,140,220);
+    -fx-text-fill: rgb(255,255,255);
+    -fx-border-color: rgba(0,0,0,0);
     -fx-background-radius: 8;
     -fx-border-radius: 8;
     -fx-padding: 12 24 12 24;
-    -fx-min-height: 44;
-    -fx-pref-height: 44;
+    -fx-min-height: 36;
+    -fx-pref-height: 36;
     -fx-font-size: 15px;
     -fx-font-weight: bold;
     -fx-cursor: hand;
 }
-.bmi-btn-save-blue:hover { -fx-background-color: #2979ff; }
+.bmi-btn-save-blue:hover { -fx-background-color: rgb(35,110,180); }
 
 .bmi-btn-secondary {
-    -fx-background-color: transparent;
+    -fx-background-color: rgba(0,0,0,0);
     -fx-text-fill: -bmi-primary;
     -fx-border-color: -bmi-primary;
     -fx-border-width: 1;
@@ -224,8 +240,8 @@
 .bmi-btn-secondary:hover { -fx-background-color: -bmi-primary-light; }
 .bmi-btn-danger {
     -fx-background-color: -bmi-danger;
-    -fx-text-fill: white;
-    -fx-border-color: transparent;
+    -fx-text-fill: rgb(255,255,255);
+    -fx-border-color: rgba(0,0,0,0);
 }
 .bmi-btn-danger:hover { -fx-opacity: 0.88; }
 .bmi-btn-switch {
@@ -241,12 +257,12 @@
     -fx-text-fill: -bmi-primary;
     -fx-cursor: hand;
 }
-.bmi-btn-switch:hover { -fx-background-color: -bmi-primary; -fx-text-fill: white; }
+.bmi-btn-switch:hover { -fx-background-color: -bmi-primary; -fx-text-fill: rgb(255,255,255); }
 
 .bmi-btn-link {
-    -fx-background-color: transparent;
+    -fx-background-color: rgba(0,0,0,0);
     -fx-text-fill: -bmi-primary;
-    -fx-border-color: transparent;
+    -fx-border-color: rgba(0,0,0,0);
     -fx-cursor: hand;
     -fx-font-size: 13px;
     -fx-underline: true;
@@ -255,42 +271,42 @@
 
 /* Functional color buttons (home page) */
 .bmi-btn-success {
-    -fx-background-color: #7cd9b5;
-    -fx-text-fill: white;
-    -fx-border-color: transparent;
+    -fx-background-color: rgb(40,160,60);
+    -fx-text-fill: rgb(255,255,255);
+    -fx-border-color: rgba(0,0,0,0);
     -fx-background-radius: 8;
     -fx-border-radius: 8;
     -fx-padding: 12 24 12 24;
-    -fx-min-height: 44;
-    -fx-pref-height: 44;
+    -fx-min-height: 36;
+    -fx-pref-height: 36;
     -fx-font-size: 14px;
     -fx-font-weight: bold;
     -fx-cursor: hand;
 }
 .bmi-btn-success:hover { -fx-opacity: 0.88; }
 .bmi-btn-warning-fn {
-    -fx-background-color: #faad14;
-    -fx-text-fill: white;
-    -fx-border-color: transparent;
+    -fx-background-color: rgb(240,170,20);
+    -fx-text-fill: rgb(255,255,255);
+    -fx-border-color: rgba(0,0,0,0);
     -fx-background-radius: 8;
     -fx-border-radius: 8;
     -fx-padding: 12 24 12 24;
-    -fx-min-height: 44;
-    -fx-pref-height: 44;
+    -fx-min-height: 36;
+    -fx-pref-height: 36;
     -fx-font-size: 14px;
     -fx-font-weight: bold;
     -fx-cursor: hand;
 }
 .bmi-btn-warning-fn:hover { -fx-opacity: 0.88; }
 .bmi-btn-danger-fn {
-    -fx-background-color: #f76b6c;
-    -fx-text-fill: white;
-    -fx-border-color: transparent;
+    -fx-background-color: rgb(220,40,40);
+    -fx-text-fill: rgb(255,255,255);
+    -fx-border-color: rgba(0,0,0,0);
     -fx-background-radius: 8;
     -fx-border-radius: 8;
     -fx-padding: 12 24 12 24;
-    -fx-min-height: 44;
-    -fx-pref-height: 44;
+    -fx-min-height: 36;
+    -fx-pref-height: 36;
     -fx-font-size: 14px;
     -fx-font-weight: bold;
     -fx-cursor: hand;
@@ -298,7 +314,7 @@
 .bmi-btn-danger-fn:hover { -fx-opacity: 0.88; }
 
 .bmi-btn-outline {
-    -fx-background-color: transparent;
+    -fx-background-color: rgba(0,0,0,0);
     -fx-text-fill: -bmi-fg-secondary;
     -fx-border-color: -bmi-border;
     -fx-border-width: 1;
@@ -313,7 +329,7 @@
 .bmi-btn-slider {
     -fx-background-color: -bmi-primary-light;
     -fx-text-fill: -bmi-primary;
-    -fx-border-color: transparent;
+    -fx-border-color: rgba(0,0,0,0);
     -fx-background-radius: 20;
     -fx-border-radius: 20;
     -fx-padding: 8 20 8 20;
@@ -321,12 +337,12 @@
     -fx-cursor: hand;
     -fx-font-size: 13px;
 }
-.bmi-btn-slider:hover { -fx-background-color: -bmi-primary; -fx-text-fill: white; }
+.bmi-btn-slider:hover { -fx-background-color: -bmi-primary; -fx-text-fill: rgb(255,255,255); }
 
 /* Password visibility toggle button */
 .bmi-pwd-toggle {
-    -fx-background-color: transparent;
-    -fx-border-color: transparent;
+    -fx-background-color: rgba(0,0,0,0);
+    -fx-border-color: rgba(0,0,0,0);
     -fx-text-fill: -bmi-muted;
     -fx-cursor: hand;
     -fx-font-size: 16px;
@@ -341,11 +357,11 @@
     -fx-border-radius: 6;
     -fx-border-color: -bmi-border;
     -fx-border-width: 1;
-    -fx-background-color: white;
+    -fx-background-color: rgb(255,255,255);
     -fx-padding: 7 12 7 12;
-    -fx-min-height: 38;
-    -fx-pref-height: 38;
-    -fx-max-height: 38;
+    -fx-min-height: 34;
+    -fx-pref-height: 34;
+    -fx-max-height: 34;
     -fx-text-fill: -bmi-fg;
     -fx-font-size: 13px;
 }
@@ -354,8 +370,8 @@
     -fx-effect: dropshadow(gaussian, rgba(64,150,255,0.25), 4, 0, 0, 0);
 }
 .bmi-field-error {
-    -fx-border-color: #f76b6c !important;
-    -fx-text-fill: #f76b6c;
+    -fx-border-color: rgb(220,40,40) !important;
+    -fx-text-fill: rgb(220,40,40);
 }
 
 .bmi-combo {
@@ -363,9 +379,9 @@
     -fx-border-radius: 6;
     -fx-border-color: -bmi-border;
     -fx-border-width: 1;
-    -fx-min-height: 38;
-    -fx-pref-height: 38;
-    -fx-background-color: white;
+    -fx-min-height: 36;
+    -fx-pref-height: 36;
+    -fx-background-color: rgb(255,255,255);
 }
 .bmi-combo:focused { -fx-border-color: -bmi-primary; }
 .bmi-combo .list-cell { -fx-text-fill: -bmi-fg; }
@@ -375,15 +391,15 @@
     -fx-border-radius: 6;
     -fx-border-color: -bmi-border;
     -fx-border-width: 1;
-    -fx-min-height: 38;
-    -fx-pref-height: 38;
-    -fx-max-height: 38;
-    -fx-background-color: white;
+    -fx-min-height: 34;
+    -fx-pref-height: 34;
+    -fx-max-height: 34;
+    -fx-background-color: rgb(255,255,255);
 }
 .bmi-date:focused { -fx-border-color: -bmi-primary; }
 .bmi-date .date-picker-display-node {
-    -fx-background-color: transparent;
-    -fx-border-color: transparent;
+    -fx-background-color: rgba(0,0,0,0);
+    -fx-border-color: rgba(0,0,0,0);
     -fx-text-fill: -bmi-fg;
 }
 .bmi-date .arrow-button { -fx-background-color: -bmi-panel; }
@@ -396,7 +412,7 @@
     -fx-text-fill: -bmi-primary;
     -fx-letter-spacing: 6px;
     -fx-padding: 4 10;
-    -fx-background-color: #f8f9fa;
+    -fx-background-color: rgb(242,242,245);
     -fx-background-radius: 6;
     -fx-border-radius: 6;
     -fx-border-color: -bmi-border;
@@ -418,7 +434,7 @@
     -fx-border-radius: 6;
     -fx-border-color: -bmi-border;
     -fx-border-width: 1;
-    -fx-background-color: white;
+    -fx-background-color: rgb(255,255,255);
     -fx-min-size: 42 46;
     -fx-max-size: 42 46;
     -fx-pref-size: 42 46;
@@ -428,17 +444,17 @@
 }
 .bmi-code-digit:focused { -fx-border-color: -bmi-primary; }
 
-/* Refresh captcha button (blue text style) */
+/* Refresh captcha button (rgb(45,140,220) text style) */
 .bmi-captcha-refresh-btn {
-    -fx-background-color: transparent;
-    -fx-text-fill: #4096ff;
-    -fx-border-color: transparent;
+    -fx-background-color: rgba(0,0,0,0);
+    -fx-text-fill: rgb(45,140,220);
+    -fx-border-color: rgba(0,0,0,0);
     -fx-cursor: hand;
     -fx-font-size: 13px;
     -fx-font-weight: normal;
     -fx-underline: true;
 }
-.bmi-captcha-refresh-btn:hover { -fx-text-fill: #2979ff; }
+.bmi-captcha-refresh-btn:hover { -fx-text-fill: rgb(35,110,180); }
 
 /* Checkbox */
 .bmi-check { -fx-text-fill: -bmi-fg; -fx-cursor: hand; -fx-font-size: 13px; }
@@ -446,21 +462,21 @@
     -fx-border-color: -bmi-border;
     -fx-border-radius: 4;
     -fx-border-width: 1.5;
-    -fx-background-color: white;
+    -fx-background-color: rgb(255,255,255);
     -fx-pref-size: 16 16;
 }
 .bmi-check:selected .box {
     -fx-background-color: -bmi-primary;
     -fx-border-color: -bmi-primary;
 }
-.bmi-check:selected .mark { -fx-background-color: white; }
+.bmi-check:selected .mark { -fx-background-color: rgb(255,255,255); }
 
 /* Required asterisk */
-.bmi-required { -fx-text-fill: #f76b6c; -fx-font-size: 13px; }
+.bmi-required { -fx-text-fill: rgb(220,40,40); -fx-font-size: 13px; }
 
 /* ==================== Floating BMI Card (Info page top-right) ==================== */
 .bmi-floating-card {
-    -fx-background-color: white;
+    -fx-background-color: rgb(255,255,255);
     -fx-background-radius: 12;
     -fx-border-radius: 12;
     -fx-border-color: -bmi-border;
@@ -475,8 +491,8 @@
     -fx-text-fill: -bmi-muted;
 }
 .bmi-floating-status-tag {
-    -fx-background-color: #e8ffef;
-    -fx-text-fill: #52c41a;
+    -fx-background-color: rgb(232,245,235);
+    -fx-text-fill: rgb(40,160,60);
     -fx-background-radius: 10;
     -fx-border-radius: 10;
     -fx-padding: 2 8 2 8;
@@ -508,11 +524,11 @@
     -fx-border-radius: 8 8 0 0;
     -fx-font-weight: bold;
     -fx-font-size: 14px;
-    -fx-text-fill: white;
+    -fx-text-fill: rgb(255,255,255);
     -fx-padding: 11 16 11 16;
 }
 .bmi-accordion .titled-pane > .title > .arrow-button .arrow {
-    -fx-background-color: white;
+    -fx-background-color: rgb(255,255,255);
     -fx-background-radius: 2;
     -fx-pref-size: 8 8;
 }
@@ -521,13 +537,13 @@
     -fx-border-color: -bmi-border;
     -fx-padding: 14 18 14 18;
 }
-.titled-pane-circum > .title { -fx-background-color: #7b61ff; }
-.titled-pane-vital > .title   { -fx-background-color: #52c41a; }
-.titled-pane-disease > .title { -fx-background-color: #f76b6c; }
+.titled-pane-circum > .title { -fx-background-color: rgb(123,97,255); }
+.titled-pane-vital > .title   { -fx-background-color: rgb(40,160,60); }
+.titled-pane-disease > .title { -fx-background-color: rgb(220,40,40); }
 
 /* ==================== Sidebar (Main page) ==================== */
 .bmi-sidebar {
-    -fx-background-color: #2b5ca8;
+    -fx-background-color: rgb(43,92,168);
     -fx-padding: 12 0 16 0;
     -fx-min-width: 180;
     -fx-pref-width: 180;
@@ -535,12 +551,12 @@
 .bmi-sidebar-logo {
     -fx-font-size: 17px;
     -fx-font-weight: bold;
-    -fx-text-fill: white;
+    -fx-text-fill: rgb(255,255,255);
     -fx-padding: 4 16 20 16;
     -fx-letter-spacing: 1;
 }
 .bmi-nav-btn {
-    -fx-background-color: transparent;
+    -fx-background-color: rgba(0,0,0,0);
     -fx-text-fill: rgba(255,255,255,0.80);
     -fx-alignment: CENTER_LEFT;
     -fx-padding: 10 18 10 18;
@@ -552,7 +568,7 @@
 .bmi-nav-btn:hover { -fx-background-color: rgba(255,255,255,0.10); }
 .bmi-nav-active {
     -fx-background-color: -bmi-primary;
-    -fx-text-fill: white;
+    -fx-text-fill: rgb(255,255,255);
     -fx-font-weight: bold;
 }
 .bmi-nav-active:hover { -fx-background-color: -bmi-primary-dark; }
@@ -574,7 +590,7 @@
     -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.07), 10, 0, 0, 3);
 }
 .bmi-metric-card-title { -fx-font-size: 12px; -fx-text-fill: rgba(255,255,255,0.82); }
-.bmi-metric-card-value { -fx-font-size: 26px; -fx-font-weight: bold; -fx-text-fill: white; }
+.bmi-metric-card-value { -fx-font-size: 26px; -fx-font-weight: bold; -fx-text-fill: rgb(255,255,255); }
 .bmi-metric-card-status { -fx-font-size: 11px; -fx-text-fill: rgba(255,255,255,0.72); }
 
 /* ==================== Page Titles ==================== */
@@ -603,7 +619,7 @@
 .bmi-toast {
     -fx-background-radius: 8;
     -fx-padding: 12 20 12 20;
-    -fx-text-fill: white;
+    -fx-text-fill: rgb(255,255,255);
     -fx-font-size: 13px;
     -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.20), 8, 0, 0, 3);
     -fx-max-width: 480;
@@ -612,14 +628,14 @@
 .bmi-toast-error   { -fx-background-color: -bmi-danger; }
 .bmi-toast-warning { -fx-background-color: -bmi-warning; }
 .bmi-toast-close {
-    -fx-background-color: transparent;
-    -fx-text-fill: white;
-    -fx-border-color: transparent;
+    -fx-background-color: rgba(0,0,0,0);
+    -fx-text-fill: rgb(255,255,255);
+    -fx-border-color: rgba(0,0,0,0);
     -fx-cursor: hand;
     -fx-font-size: 14px;
     -fx-padding: 0 4 0 4;
 }
-.bmi-toast-close:hover { -fx-text-fill: #ffe0e0; }
+.bmi-toast-close:hover { -fx-text-fill: rgb(255,224,224); }
 
 /* ==================== Table ==================== */
 .bmi-table {
@@ -649,10 +665,10 @@
     -fx-background-color: -bmi-primary-light;
     -fx-text-fill: -bmi-fg;
 }
-.bmi-table .row-thin       { -fx-background-color: #e8f3ff; }
-.bmi-table .row-normal     { -fx-background-color: #d7f5e3; }
-.bmi-table .row-overweight { -fx-background-color: #ffe2c2; }
-.bmi-table .row-obese      { -fx-background-color: #ffd9d9; }
+.bmi-table .row-thin       { -fx-background-color: rgb(225,238,250); }
+.bmi-table .row-normal     { -fx-background-color: rgb(215,245,227); }
+.bmi-table .row-overweight { -fx-background-color: rgb(255,226,194); }
+.bmi-table .row-obese      { -fx-background-color: rgb(255,217,217); }
 
 /* ==================== Chart ==================== */
 .bmi-chart {
@@ -674,12 +690,12 @@
     -fx-pref-size: 8 8;
 }
 /* Chart series colors */
-.default-color0.chart-series-line { -fx-stroke: #4096ff; }
-.default-color1.chart-series-line { -fx-stroke: #7cd9b5; }
-.default-color2.chart-series-line { -fx-stroke: #faad14; }
-.default-color0.chart-line-symbol { -fx-background-color: #4096ff; }
-.default-color1.chart-line-symbol { -fx-background-color: #7cd9b5; }
-.default-color2.chart-line-symbol { -fx-background-color: #faad14; }
+.default-color0.chart-series-line { -fx-stroke: rgb(45,140,220); }
+.default-color1.chart-series-line { -fx-stroke: rgb(40,160,60); }
+.default-color2.chart-series-line { -fx-stroke: rgb(240,170,20); }
+.default-color0.chart-line-symbol { -fx-background-color: rgb(45,140,220); }
+.default-color1.chart-line-symbol { -fx-background-color: rgb(40,160,60); }
+.default-color2.chart-line-symbol { -fx-background-color: rgb(240,170,20); }
 
 /* ==================== Dialog ==================== */
 .bmi-dialog { -fx-background-color: -bmi-panel-solid; }
@@ -688,12 +704,12 @@
     -fx-background-radius: 8;
     -fx-border-radius: 8;
     -fx-border-color: -bmi-primary;
-    -fx-background-color: transparent;
+    -fx-background-color: rgba(0,0,0,0);
     -fx-text-fill: -bmi-primary;
     -fx-cursor: hand;
     -fx-padding: 6 16 6 16;
 }
-.bmi-dialog .button:hover { -fx-background-color: -bmi-primary; -fx-text-fill: white; }
+.bmi-dialog .button:hover { -fx-background-color: -bmi-primary; -fx-text-fill: rgb(255,255,255); }
 
 /* ==================== Settings Popup ==================== */
 .bmi-settings-popup {
@@ -704,8 +720,8 @@
     -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.20), 24, 0, 0, 8);
 }
 .bmi-close-x {
-    -fx-background-color: transparent;
-    -fx-text-fill: #f76b6c;
+    -fx-background-color: rgba(0,0,0,0);
+    -fx-text-fill: rgb(220,40,40);
     -fx-font-size: 18px;
     -fx-font-weight: bold;
     -fx-cursor: hand;
@@ -714,7 +730,7 @@
     -fx-background-radius: 50%;
     -fx-padding: 0;
 }
-.bmi-close-x:hover { -fx-background-color: #ffece8; }
+.bmi-close-x:hover { -fx-background-color: rgb(250,230,230); }
 
 /* ==================== Theme Blocks (Settings) ==================== */
 .bmi-theme-block {
@@ -763,7 +779,7 @@
 
 /* ==================== Misc ==================== */
 .bmi-badge-dot {
-    -fx-background-color: #f76b6c;
+    -fx-background-color: rgb(220,40,40);
     -fx-background-radius: 50%;
     -fx-min-size: 8 8;
     -fx-max-size: 8 8;
@@ -823,7 +839,7 @@
 
 /* Form card container (info page left side) */
 .bmi-form-card {
-    -fx-background-color: white;
+    -fx-background-color: rgb(255,255,255);
     -fx-background-radius: 12;
     -fx-border-radius: 12;
     -fx-border-color: -bmi-border;

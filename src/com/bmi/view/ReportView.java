@@ -4,7 +4,9 @@ import com.bmi.controller.ReportController;
 import com.bmi.i18n.AppConfig;
 import com.bmi.i18n.LangChangeListener;
 import com.bmi.i18n.ThemeChangeListener;
+import com.bmi.model.User;
 import com.bmi.view.util.I18nUtil;
+import com.bmi.view.util.PageNavigator;
 import com.bmi.view.util.StyleFactory;
 import com.bmi.view.util.ThemeConstant;
 import javafx.geometry.Insets;
@@ -22,19 +24,23 @@ import java.util.Date;
 /**
  * 报告导出页面（对齐 ui_design.md 第五章）。
  * 提供 HTML 报告生成与预览功能。
+ * 由 InputView 进入，底部【返回录入页】返回 InputView。
  */
 public class ReportView extends VBox implements LangChangeListener, ThemeChangeListener {
 
     private final ReportController reportController;
+    private final User user;
     private final long userId;
     private final Label title;
     private final TextArea previewArea;
     private final Button exportBtn;
     private final Label pathLabel;
+    private final Button backBtn;
 
-    public ReportView(ReportController reportController, long userId) {
+    public ReportView(ReportController reportController, User user) {
         this.reportController = reportController;
-        this.userId = userId;
+        this.user = user;
+        this.userId = user != null ? user.getId() : -1L;
         setPadding(new Insets(24));
         setSpacing(15);
         setStyle("-fx-background-color:" + ThemeConstant.DEFAULT_THEME.bg() + ";");
@@ -53,7 +59,10 @@ public class ReportView extends VBox implements LangChangeListener, ThemeChangeL
         exportBtn = StyleFactory.primaryButton("report.export");
         exportBtn.setOnAction(e -> onExport());
 
-        HBox btnBox = new HBox(16, exportBtn);
+        backBtn = StyleFactory.secondaryButton("input.backToInput");
+        backBtn.setOnAction(e -> PageNavigator.toInput(user));
+
+        HBox btnBox = new HBox(16, exportBtn, backBtn);
         btnBox.setAlignment(Pos.CENTER_LEFT);
 
         getChildren().addAll(title, pathLabel, previewArea, btnBox);
@@ -90,6 +99,7 @@ public class ReportView extends VBox implements LangChangeListener, ThemeChangeL
         title.setText(I18nUtil.t("nav.report"));
         exportBtn.setText(I18nUtil.t("report.export"));
         pathLabel.setText(I18nUtil.t("report.path"));
+        backBtn.setText(I18nUtil.t("input.backToInput"));
     }
 
     @Override
