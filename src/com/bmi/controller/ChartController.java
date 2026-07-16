@@ -1,6 +1,5 @@
 package com.bmi.controller;
 
-import com.bmi.i18n.I18n;
 import com.bmi.model.BodyRecord;
 import com.bmi.model.db.RecordDao;
 
@@ -29,12 +28,14 @@ public class ChartController {
      * 按指标名抽取数值序列：bmi / weight / bodyFat。
      */
     public double valueOf(BodyRecord r, String metric) {
-        if (metric.equals(I18n.t("ai.chart.weight"))) {
-            return r.getWeight();
-        } else if (metric.equals(I18n.t("ai.chart.bodyfat"))) {
-            return r.getBodyFat();
-        } else {
-            return r.getBmi();
+        switch (metric) {
+            case "体重":
+                return r.getWeight();
+            case "体脂率":
+                return r.getBodyFat();
+            case "BMI":
+            default:
+                return r.getBmi();
         }
     }
 }

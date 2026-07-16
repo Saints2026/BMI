@@ -66,7 +66,6 @@ public final class AppConfig {
     private Lang lang = Lang.ZH;
     private String theme = "fresh";
     private boolean mockDaoEnabled = false; // Mock 模式：开启后使用 MockUserDao 脱离后端自测
-    private boolean skipCaptcha = false; // 验证码开关：Mock 模式下可跳过验证码便于测试
     private final List<LangChangeListener> listeners = new ArrayList<>();
     private final List<ThemeChangeListener> themeListeners = new ArrayList<>();
 
@@ -89,8 +88,6 @@ public final class AppConfig {
         this.theme = (th != null && !th.trim().isEmpty()) ? th.trim() : "fresh";
         // Mock 模式开关（缺省关闭，走原 InMemoryUserDao）
         this.mockDaoEnabled = Boolean.parseBoolean(p.getProperty("mock.dao.enabled", "false"));
-        // 验证码开关（Mock 模式下自动跳过验证码）
-        this.skipCaptcha = Boolean.parseBoolean(p.getProperty("skip.captcha", "false"));
     }
 
     // ============ 语言 ============
@@ -180,19 +177,6 @@ public final class AppConfig {
     public void setMockDaoEnabled(boolean on) {
         this.mockDaoEnabled = on;
         setProp("mock.dao.enabled", Boolean.toString(on));
-    }
-
-    // ============ 验证码开关（Mock 模式下可跳过验证码） ============
-
-    /** 是否跳过验证码：Mock 模式下可开启，便于自动化测试。 */
-    public boolean isSkipCaptcha() {
-        return skipCaptcha;
-    }
-
-    /** 设置验证码开关并持久化到 app-config.properties（skip.captcha）。 */
-    public void setSkipCaptcha(boolean skip) {
-        this.skipCaptcha = skip;
-        setProp("skip.captcha", Boolean.toString(skip));
     }
 
     // ============ 监听器注册 ============

@@ -52,6 +52,15 @@ public interface RecordDao {
     BodyRecord findLatest(long userId);
 
     /**
+     * 取某用户最近 N 条记录（按测量时间倒序取 N 条，返回时翻转为时间升序），
+     * 用于 AI 历史趋势（P1-F4，避免请求体过大）。
+     *
+     * @param n 最大条数（建议 10）
+     * @return 时间升序的最新 N 条；不足 N 条则返回全部
+     */
+    List<BodyRecord> queryLatestN(long userId, int n);
+
+    /**
      * 按主键精确查询单条记录（v1.1，支撑 PhotoController 绑定/解绑前的归属校验与路径读取）。
      * 返回 null 表示不存在。
      */

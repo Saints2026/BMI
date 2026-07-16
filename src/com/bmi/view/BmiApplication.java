@@ -15,11 +15,8 @@ import com.bmi.view.util.PageNavigator;
 import com.bmi.view.util.UserSession;
 import javafx.application.Application;
 import javafx.scene.Parent;
+import javafx.scene.Scene;
 import javafx.stage.Stage;
-
-import java.io.FileInputStream;
-import java.io.InputStream;
-import java.util.Properties;
 
 /**
  * BMI 桌面应用启动器（重写启动链路：注册 → 登录 → 体质录入 → 主界面）。
@@ -72,30 +69,7 @@ public class BmiApplication extends Application implements PageNavigator.Navigat
         if (recordController == null) {
             recordController = new RecordController(recordDao);
             chartController = new ChartController(recordDao);
-            // AI 控制器：从 ai-key.properties 读取密钥（禁止硬编码，宪章第 4/7 节）
-            System.out.println("[BMI] 开始构造 AiController...");
-            try {
-                Properties aiProps = new Properties();
-                try (InputStream is = AiController.class.getClassLoader()
-                        .getResourceAsStream("ai-key.properties")) {
-                    if (is != null) {
-                        aiProps.load(is);
-                    } else {
-                        try (InputStream fis = new FileInputStream("ai-key.properties")) {
-                            aiProps.load(fis);
-                        }
-                    }
-                }
-                String apiKey = aiProps.getProperty("api.key", "");
-                String apiUrl = aiProps.getProperty("api.url",
-                        "https://api.deepseek.com/v1/chat/completions");
-                aiController = new AiController(apiKey, apiUrl);
-                System.out.println("[BMI] AiController 构造成功！");
-            } catch (Exception e) {
-                System.err.println("[BMI] AiController 构造失败！");
-                e.printStackTrace();
-                aiController = null;
-            }
+            aiController = new AiController(recordDao);
             photoController = new PhotoController(recordDao);
             reportController = new ReportController(recordController, chartController, aiController);
             System.out.println("[BMI] main controllers lazily wired (Record/Chart/AI/Photo/Report)");

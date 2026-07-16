@@ -1,7 +1,6 @@
 package com.bmi.controller;
 
 import com.bmi.model.BodyRecord;
-import com.bmi.util.Result;
 
 import java.io.BufferedWriter;
 import java.io.IOException;
@@ -111,9 +110,7 @@ public class ReportController {
 
         if (options.includeAi) {
             html.append("<div class='section'><h2>三、AI 健康建议</h2>");
-            // 修复：传入 records 列表，接收 Result<String>
-            Result<String> result = aiController.getAdvice(records);
-            String advice = (result.getData() != null) ? result.getData() : result.getMsg();
+            String advice = aiController.getAdvice(userId);
             html.append("<pre>").append(escapeHtml(advice)).append("</pre></div>");
         }
 

@@ -10,6 +10,7 @@ import java.sql.Statement;
 import java.sql.Timestamp;
 import java.sql.Types;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 /**
@@ -273,6 +274,31 @@ public class JdbcRecordDao implements RecordDao {
             return null;
         } catch (SQLException e) {
             throw new DbException("查询最新记录失败：" + e.getMessage(), e);
+        } finally {
+            DbUtil.closeQuietly(rs, ps);
+            DbUtil.closeQuietly(conn);
+        }
+    }
+
+    @Override
+    public List<BodyRecord> queryLatestN(long userId, int n) {
+        // 按测量时间倒序取最近 N 条（命中 idx_record_user_time），再翻转为时间升序供趋势展示（P1-F4）
+        final String sql = "SELECT " + COLS + " FROM `body_record`"
+                + " WHERE `user_id` = ? ORDER BY `measure_time` DESC LIMIT ?";
+        Connection conn = null;
+        PreparedStatement ps = null;
+        ResultSet rs = null;
+        try {
+            conn = DbUtil.getConnection();
+            ps = conn.prepareStatement(sql);
+            ps.setLong(1, userId);
+            ps.setInt(2, Math.max(1, n));
+            rs = ps.executeQuery();
+            List<BodyRecord> desc = mapList(rs);   // 最新在前
+            Collections.reverse(desc);             // 翻转为时间升序
+            return desc;
+        } catch (SQLException e) {
+            throw new DbException("查询最近记录失败：" + e.getMessage(), e);
         } finally {
             DbUtil.closeQuietly(rs, ps);
             DbUtil.closeQuietly(conn);
