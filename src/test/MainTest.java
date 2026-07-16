@@ -1,68 +1,76 @@
 package test;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.sql.Timestamp;
 import java.time.LocalDateTime;
 import java.util.List;
 
-import org.junit.AfterClass;
-import org.junit.BeforeClass;
-import org.junit.FixMethodOrder;
-import org.junit.Test;
-import org.junit.runners.MethodSorters;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.MethodOrderer;
+import org.junit.jupiter.api.Order;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestMethodOrder;
 
 import com.bmi.model.BodyRecord;
 import com.bmi.model.User;
-import com.bmi.model.db.RecordDAO;
+import com.bmi.model.db.RecordDao;
 import com.bmi.model.db.JdbcUtil;
-import com.bmi.model.db.UserDAO;
+import com.bmi.model.db.UserDao;
 
 /**
  * BMI 系统 CRUD 集成测试。
  * <p>
  * 覆盖流程：登录/注册 → 创建多条 BodyRecord → 查询（列表+单条+时间范围+分页） → 更新 → 删除 → 清理。
+ * <p>
+ * 使用 JUnit 5（Jupiter）注解，遵循 ui_lib_record.md 依赖白名单。
  */
-@FixMethodOrder(MethodSorters.NAME_ASCENDING)
+@TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 public class MainTest {
 
     private static final String USERNAME = "test_bmi_user";
     private static final String PASSWORD = "Test123456";
 
-    private static UserDAO userDao = new UserDAO();
-    private static RecordDAO recordDao = new RecordDAO();
+    private static UserDao userDao = new UserDao();
+    private static RecordDao recordDao = new RecordDao();
     private static long uid;
     private static BodyRecord r1;
     private static BodyRecord r2;
     private static BodyRecord r3;
 
-    @BeforeClass
+    @BeforeAll
     public static void init() {
         cleanupUser();
         cleanupRecords();
     }
 
     @Test
+    @Order(1)
     public void test1LoginAndRegister() {
         User user = userDao.login(USERNAME, PASSWORD);
         if (user == null) {
-            boolean ok = userDao.register(USERNAME, PASSWORD);
-            assertTrue("User registration should succeed", ok);
+            User newUser = new User();
+            newUser.setUsername(USERNAME);
+            newUser.setPasswordHash(PASSWORD);
+            boolean ok = userDao.insert(newUser);
+            assertTrue(ok, "User registration should succeed");
             user = userDao.login(USERNAME, PASSWORD);
         }
-        assertNotNull("User should be logged in", user);
+        assertNotNull(user, "User should be logged in");
         uid = user.getId();
     }
 
     @Test
+    @Order(2)
     public void test2CreateRecord() {
         r1 = buildRecord(uid, 175.0, 70.0, LocalDateTime.of(2026, 7, 1, 10, 0));
-        assertTrue("Add record 1", recordDao.addRecord(r1));
+        assertTrue(recordDao.insert(r1), "Add record 1");
 
         r2 = buildRecord(uid, 175.0, 72.0, LocalDateTime.of(2026, 7, 8, 10, 0));
-        assertTrue("Add record 2", recordDao.addRecord(r2));
+        assertTrue(recordDao.insert(r2), "Add record 2");
 
         r3 = new BodyRecord();
         r3.setUserId(uid);
@@ -73,57 +81,70 @@ public class MainTest {
         r3.setBmi(71.5 / (heightM * heightM));
         r3.setBodyFat(18.5);
         r3.setCreatedAt(LocalDateTime.now());
-        assertTrue("Add record 3", recordDao.addRecord(r3));
+        assertTrue(recordDao.insert(r3), "Add record 3");
     }
 
     @Test
+    @Order(3)
     public void test3QueryRecords() {
         List<BodyRecord> all = recordDao.listAllRecords(uid);
-        assertEquals("Should have 3 records", 3, all.size());
+        assertEquals(3, all.size(), "Should have 3 records");
 
-        BodyRecord fetched = recordDao.getRecordById(r1.getId(), uid);
-        assertNotNull("Record should be found by id", fetched);
-        assertEquals("Weight should match", 70.0, fetched.getWeight(), 0.01);
+        BodyRecord fetched = recordDao.findById(r1.getId(), uid);
+        assertNotNull(fetched, "Record should be found by id");
+        assertEquals(70.0, fetched.getWeight(), 0.01, "Weight should match");
     }
 
     @Test
+    @Order(4)
     public void test4UpdateRecord() {
         r1.setWeight(68.5);
         r1.setBmi(68.5 / (1.75 * 1.75));
         r1.setBodyFat(17.2);
         r1.setWaistCircum(80.0);
         r1.setHeartRate(65);
-        assertTrue("Update should succeed", recordDao.updateRecord(r1));
+        assertTrue(recordDao.update(r1), "Update should succeed");
 
-        BodyRecord afterUpdate = recordDao.getRecordById(r1.getId(), uid);
-        assertNotNull("Record should exist after update", afterUpdate);
-        assertEquals("Updated weight", 68.5, afterUpdate.getWeight(), 0.01);
-        assertEquals("Updated BMI", 68.5 / (1.75 * 1.75), afterUpdate.getBmi(), 0.1);
+        BodyRecord afterUpdate = recordDao.findById(r1.getId(), uid);
+        assertNotNull(afterUpdate, "Record should exist after update");
+        assertEquals(68.5, afterUpdate.getWeight(), 0.01, "Updated weight");
+        assertEquals(68.5 / (1.75 * 1.75), afterUpdate.getBmi(), 0.1, "Updated BMI");
     }
 
     @Test
+    @Order(5)
     public void test5DeleteRecord() {
-        assertTrue("Delete should succeed", recordDao.deleteRecord(r3.getId(), uid));
+        assertTrue(recordDao.deleteById(r3.getId()), "Delete should succeed");
 
         List<BodyRecord> afterDelete = recordDao.listAllRecords(uid);
-        assertEquals("Should have 2 records after delete", 2, afterDelete.size());
+        assertEquals(2, afterDelete.size(), "Should have 2 records after delete");
     }
 
     @Test
+    @Order(6)
     public void test6QueryByTimeRange() {
         Timestamp start = Timestamp.valueOf(LocalDateTime.of(2026, 7, 1, 0, 0));
         Timestamp end = Timestamp.valueOf(LocalDateTime.of(2026, 7, 9, 0, 0));
-        List<BodyRecord> result = recordDao.queryByUserAndTimeRange(uid, start, end);
-        assertEquals("Should find 2 records in range", 2, result.size());
+        List<BodyRecord> result = recordDao.queryByUser(uid, start, end);
+        assertEquals(2, result.size(), "Should find 2 records in range");
     }
 
     @Test
+    @Order(7)
     public void test7QueryByPage() {
-        List<BodyRecord> page = recordDao.queryByUserPage(uid, null, null, 0, 1);
-        assertEquals("First page should have 1 record", 1, page.size());
+        List<BodyRecord> page = recordDao.queryByUserPage(uid, 1, 1);
+        assertEquals(1, page.size(), "First page should have 1 record");
     }
 
-    @AfterClass
+    @Test
+    @Order(8)
+    public void test8FindLatest() {
+        BodyRecord latest = recordDao.findLatest(uid);
+        assertNotNull(latest, "Latest record should exist");
+        assertEquals(r2.getId(), latest.getId(), "Latest should be r2 (r3 was deleted)");
+    }
+
+    @AfterAll
     public static void cleanup() {
         cleanupRecords();
         cleanupUser();

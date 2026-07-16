@@ -3,8 +3,9 @@ package com.bmi.model;
 /**
  * BMI 与体脂计算工具类。
  * <p>
- * 提供 BMI 计算、中国标准分级功能。
- * 规划中应将此拆分为 BmiCalculator 与 BodyFatCalculator 两个独立类，归属 model.ai 层。
+ * 提供 BMI 计算、中国标准分级、体脂预测功能。
+ * <p>
+ * 分级结果使用枚举 {@link BmiCategory}，不在业务层硬编码中文文案（中文展示由 view 层 i18n 负责）。
  */
 public class CalcUtil {
 
@@ -35,13 +36,15 @@ public class CalcUtil {
     }
 
     /**
-     * 中国标准 BMI 分级。
+     * 中国标准 BMI 分级，返回枚举值（不含中文文案）。
+     * <p>
+     * 中文展示文案由 view 层 i18n 根据枚举值查表获取。
      *
      * @param bmi BMI 值
-     * @return 分级结果：偏瘦 / 正常 / 超重 / 肥胖
+     * @return 分级枚举值
      * @throws IllegalArgumentException BMI 无效时抛出
      */
-    public static String classifyBmi(double bmi) {
+    public static BmiCategory classifyBmi(double bmi) {
         if (Double.isNaN(bmi)) {
             throw new IllegalArgumentException("BMI must be a valid number");
         }
@@ -52,13 +55,33 @@ public class CalcUtil {
             throw new IllegalArgumentException("BMI out of reasonable range");
         }
         if (bmi < 18.5) {
-            return "偏瘦";
+            return BmiCategory.UNDERWEIGHT;
         } else if (bmi < 24.0) {
-            return "正常";
+            return BmiCategory.NORMAL;
         } else if (bmi < 28.0) {
-            return "超重";
+            return BmiCategory.OVERWEIGHT;
         } else {
-            return "肥胖";
+            return BmiCategory.OBESE;
         }
+    }
+
+    /**
+     * 体脂率预测（Deurenberg 公式）。
+     * <p>
+     * 公式：body_fat = 1.20 × BMI + 0.23 × age − 10.8 × gender − 5.4
+     * <p>
+     * gender: 1 = 男，0 = 女。结果不低于 0，保留 1 位小数。
+     *
+     * @param bmi    BMI 值
+     * @param age    年龄（1–120）
+     * @param gender 性别（1=男，0=女）
+     * @return 体脂率百分比
+     */
+    public static double predictBodyFat(double bmi, int age, int gender) {
+        if (bmi <= 0 || age <= 0) {
+            return 0;
+        }
+        double base = 1.20 * bmi + 0.23 * age - 10.8 * gender - 5.4;
+        return Math.round(Math.max(0, base) * 10.0) / 10.0;
     }
 }
