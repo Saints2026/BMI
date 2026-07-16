@@ -87,6 +87,15 @@ public interface RecordDao {
     List<BodyRecord> listAllRecords(long userId);
 
     /**
+     * 查询某用户最近的 N 条记录（按测量时间倒序），用于 AI 历史趋势。
+     *
+     * @param userId 用户 ID
+     * @param limit  条数上限（<=0 时按默认 10）
+     * @return 记录列表（测量时间倒序）
+     */
+    List<BodyRecord> queryLatestN(long userId, int limit);
+
+    /**
      * 按主键 + 用户 ID 查询单条记录（防越权）。
      *
      * @param recordId 记录 ID

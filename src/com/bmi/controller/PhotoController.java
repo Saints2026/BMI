@@ -51,7 +51,7 @@ public class PhotoController {
         }
 
         // 归属校验：记录必须存在且属于该用户
-        BodyRecord rec = recordDao.findById(recordId);
+        BodyRecord rec = recordDao.findById(recordId, userId);
         if (rec == null || rec.getUserId() != userId) {
             return false;
         }
@@ -79,7 +79,7 @@ public class PhotoController {
      * @param deleteLocal 是否同时删除本地图片文件
      */
     public boolean unbindPhoto(long recordId, long userId, boolean deleteLocal) {
-        BodyRecord rec = recordDao.findById(recordId);
+        BodyRecord rec = recordDao.findById(recordId, userId);
         if (rec == null || rec.getUserId() != userId) {
             return false;
         }
@@ -100,7 +100,7 @@ public class PhotoController {
      * 读取已绑定路径（供 UI 仅展示文本，不预览，呼应一.5）。
      */
     public String getPhotoPath(long recordId, long userId) {
-        BodyRecord rec = recordDao.findById(recordId);
+        BodyRecord rec = recordDao.findById(recordId, userId);
         if (rec == null || rec.getUserId() != userId) {
             return null;
         }

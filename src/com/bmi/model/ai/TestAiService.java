@@ -61,7 +61,7 @@ public class TestAiService {
         r.setHeight(height);
         r.setAge(age);
         r.setGender(gender);
-        r.setMeasureTime(Timestamp.valueOf(measureTime));
+        r.setMeasureTime(Timestamp.valueOf(measureTime).toLocalDateTime());
         return r;
     }
 }

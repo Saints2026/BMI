@@ -212,6 +212,28 @@ public class JdbcRecordDao implements RecordDao {
     }
 
     @Override
+    public List<BodyRecord> queryLatestN(long userId, int limit) {
+        String sql = SELECT_ALL + " WHERE user_id = ? ORDER BY measure_time DESC LIMIT ?";
+        Connection conn = null;
+        PreparedStatement ps = null;
+        ResultSet rs = null;
+        try {
+            conn = JdbcUtil.getConnection();
+            ps = conn.prepareStatement(sql);
+            ps.setLong(1, userId);
+            ps.setInt(2, limit > 0 ? limit : 10);
+            rs = ps.executeQuery();
+            List<BodyRecord> list = new ArrayList<>();
+            while (rs.next()) list.add(mapRecord(rs));
+            return list;
+        } catch (SQLException e) {
+            throw new DataAccessException("Failed to query latest records for userId: " + userId, e);
+        } finally {
+            JdbcUtil.close(conn, ps, rs);
+        }
+    }
+
+    @Override
     public BodyRecord findById(long recordId, long userId) {
         String sql = SELECT_ALL + " WHERE id = ? AND user_id = ?";
         Connection conn = null;

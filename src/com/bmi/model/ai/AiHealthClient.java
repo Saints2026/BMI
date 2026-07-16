@@ -15,7 +15,9 @@ import java.net.URI;
 import java.net.URL;
 import java.net.UnknownHostException;
 import java.nio.charset.StandardCharsets;
+import java.sql.Timestamp;
 import java.text.SimpleDateFormat;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Properties;
@@ -149,7 +151,7 @@ public class AiHealthClient {
                 + "\"height\":" + latest.getHeight() + ","
                 + "\"age\":" + latest.getAge() + ","
                 + "\"gender\":" + latest.getGender() + ","
-                + "\"measureTime\":\"" + escapeJson(format(latest.getMeasureTime())) + "\""
+                + "\"measureTime\":\"" + escapeJson(format(Timestamp.from(latest.getMeasureTime().atZone(ZoneId.systemDefault()).toInstant()))) + "\""
                 + "}";
 
         // historyTrend 数组（时间升序，最多 10 条）
@@ -160,7 +162,7 @@ public class AiHealthClient {
             BodyRecord r = recent.get(i);
             if (i > 0) trend.append(",");
             trend.append("{")
-                    .append("\"measureTime\":\"").append(escapeJson(format(r.getMeasureTime()))).append("\",")
+                    .append("\"measureTime\":\"").append(escapeJson(format(Timestamp.from(r.getMeasureTime().atZone(ZoneId.systemDefault()).toInstant())))).append("\",")
                     .append("\"bmi\":").append(round1(r.getBmi())).append(",")
                     .append("\"weight\":").append(r.getWeight()).append(",")
                     .append("\"bodyFat\":").append(round1(r.getBodyFat()))
@@ -176,7 +178,7 @@ public class AiHealthClient {
                         + " 请按【饮食】【运动】【健康】三段给出可执行的建议。",
                 latest.getBmi(), classify(latest.getBmi()), latest.getWeight(), latest.getBodyFat(),
                 latest.getHeight(), latest.getAge(), latest.getGender() == 1 ? "男" : "女",
-                format(latest.getMeasureTime()),
+                format(Timestamp.from(latest.getMeasureTime().atZone(ZoneId.systemDefault()).toInstant())),
                 recent.size(), direction);
 
         return "{"

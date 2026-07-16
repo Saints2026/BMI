@@ -6,7 +6,7 @@ import com.bmi.model.db.UserDao;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
-import java.sql.Timestamp;
+import java.time.LocalDateTime;
 import java.util.Base64;
 
 /**
@@ -37,7 +37,7 @@ public class UserController {
         user.setUsername(username);
         user.setSalt(salt);
         user.setPasswordHash(hash(password, salt));
-        user.setCreatedAt(new Timestamp(System.currentTimeMillis()));
+        user.setCreatedAt(java.time.LocalDateTime.now());
         user.setStatus(1);
         userDao.insert(user);
         return true;

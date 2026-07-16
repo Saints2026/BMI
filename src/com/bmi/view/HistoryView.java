@@ -283,7 +283,7 @@ public class HistoryView extends BorderPane implements LangChangeListener {
         return recordController.queryRecords(userId, toTs(dpStart.getValue(), true), toTs(dpEnd.getValue(), false));
     }
 
-    private void deleteViaController(long id) { recordController.deleteRecord(id); }
+    private void deleteViaController(long id) { recordController.deleteRecord(id, userId); }
 
     private void loadData() {
         List<BodyRecord> list = fetchRecords();

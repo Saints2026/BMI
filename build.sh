@@ -13,7 +13,8 @@ echo "==> [1/4] Base: i18n + model"
 "$JAVAC" -encoding UTF-8 -d "$OUT" "${FX_FLAGS[@]}" -cp "$OUT" \
   $(find src/com/bmi/i18n -name "*.java") \
   src/com/bmi/model/User.java \
-  src/com/bmi/model/BodyRecord.java
+  src/com/bmi/model/BodyRecord.java \
+  src/com/bmi/model/BmiCategory.java
 echo "==> [2/4] Business: model.ai + model.db"
 "$JAVAC" -encoding UTF-8 -d "$OUT" "${FX_FLAGS[@]}" -cp "$OUT" \
   $(find src/com/bmi/model/ai src/com/bmi/model/db -name "*.java" ! -name "JdbcRecordDaoChainTest.java")

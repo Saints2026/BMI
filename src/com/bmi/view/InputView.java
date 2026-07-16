@@ -234,7 +234,7 @@ public class InputView extends BorderPane implements LangChangeListener {
         tfAge.setText(String.valueOf(r.getAge()));
         cbGender.setValue(r.getGender() == 1 ? I18nUtil.t("input.male") : I18nUtil.t("input.female"));
         if (r.getMeasureTime() != null) {
-            dpTime.setValue(r.getMeasureTime().toLocalDateTime().toLocalDate());
+            dpTime.setValue(r.getMeasureTime().toLocalDate());
         }
         tfWaist.setText(fmt(r.getWaistCircum()));
         tfHip.setText(fmt(r.getHipCircum()));
