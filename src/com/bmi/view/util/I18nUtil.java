@@ -4,6 +4,7 @@ import com.bmi.i18n.AppConfig;
 import com.bmi.i18n.Lang;
 import com.bmi.i18n.LangChangeListener;
 
+import java.io.FileInputStream;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
@@ -78,12 +79,22 @@ public final class I18nUtil {
 
     private static Properties load(String name) {
         Properties p = new Properties();
+        // 1. Classpath 优先（生产部署时 .properties 与 .class 同目录）
         try (InputStream is = I18nUtil.class.getClassLoader()
                 .getResourceAsStream("com/bmi/i18n/" + name)) {
             if (is != null) {
                 // 关键：.properties 含中文，必须以 UTF-8 读取，否则默认 ISO-8859-1 会乱码。
                 p.load(new InputStreamReader(is, StandardCharsets.UTF_8));
+                if (!p.isEmpty()) {
+                    return p;
+                }
             }
+        } catch (Exception ignored) {
+            // classpath 加载失败，继续尝试文件系统
+        }
+        // 2. 回退源码目录（开发模式：javac -d 不复制 .properties 文件）
+        try (InputStream is = new FileInputStream("src/com/bmi/i18n/" + name)) {
+            p.load(new InputStreamReader(is, StandardCharsets.UTF_8));
         } catch (Exception ignored) {
             // 资源缺失不阻断启动，t() 会回退返回 key
         }
