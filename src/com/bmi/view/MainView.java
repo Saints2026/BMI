@@ -52,6 +52,11 @@ public class MainView extends BorderPane implements LangChangeListener {
     private final ComboBox<String> themeCombo = new ComboBox<>();
     private final Button logoutBtn = new Button();
 
+    // 顶部栏标签（需随语言切换刷新）
+    private final Label lblTopUser = new Label();
+    private final Label lblTopLang = new Label();
+    private final Label lblTopTheme = new Label();
+
     private InputView inputView;
     private ChartView chartView;
     private final VBox center = new VBox(16);
@@ -120,10 +125,13 @@ public class MainView extends BorderPane implements LangChangeListener {
         });
 
         userNameLabel.setText(user.getUsername());
+        lblTopUser.setText(I18n.t("topbar.username") + "：" + user.getUsername());
+        lblTopLang.setText(I18n.t("topbar.lang"));
+        lblTopTheme.setText(I18n.t("topbar.theme"));
         top.getChildren().addAll(
-                new Label(I18n.t("topbar.username") + "：" + user.getUsername()),
-                new Label(I18n.t("topbar.lang")), langCombo,
-                new Label(I18n.t("topbar.theme")), themeCombo,
+                lblTopUser,
+                lblTopLang, langCombo,
+                lblTopTheme, themeCombo,
                 logoutBtn);
         setTop(top);
     }
@@ -227,6 +235,9 @@ public class MainView extends BorderPane implements LangChangeListener {
         }
         userNameLabel.setText(user.getUsername());
         logoutBtn.setText(I18n.t("topbar.logout"));
+        lblTopUser.setText(I18n.t("topbar.username") + "：" + user.getUsername());
+        lblTopLang.setText(I18n.t("topbar.lang"));
+        lblTopTheme.setText(I18n.t("topbar.theme"));
         themeCombo.getItems().setAll(I18n.t("setting.light"), I18n.t("setting.dark"));
         // 当前页若为首页则重渲染卡片；Input/Chart 已自行监听语言变化，无需重建
         if (currentPage.equals("home")) {

@@ -8,7 +8,9 @@ import com.bmi.controller.ReportController;
 import com.bmi.controller.SettingController;
 import com.bmi.controller.UserController;
 import com.bmi.exception.AiConfigException;
+import com.bmi.i18n.AppConfig;
 import com.bmi.i18n.I18n;
+import com.bmi.i18n.Lang;
 import com.bmi.model.User;
 import com.bmi.model.db.InMemoryUserDao;
 import com.bmi.model.db.JdbcRecordDao;
@@ -48,6 +50,9 @@ public class BmiApplication extends Application {
     @Override
     public void start(Stage stage) {
         this.stage = stage;
+        // 从持久化配置初始化语言（默认 zh → 中文）
+        String langCode = settingController.getLangDefault();
+        AppConfig.getInstance().setLang(Lang.fromCode(langCode));
         stage.setTitle(I18n.t("app.title"));
         stage.setScene(new Scene(new LoginView(userController, this::onLogin), 920, 620));
         stage.show();

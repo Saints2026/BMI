@@ -4,10 +4,8 @@ out/
 bin/
 *.class
 
-# 编译输出
-bin/
-com/
-*.class
+# 编译输出（javac -d . 产物，仅根目录下的 com/）
+/com/
 
 # IDE配置
 .idea/

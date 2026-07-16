@@ -48,6 +48,12 @@ public class LoginView extends BorderPane implements LangChangeListener {
     private final Button refreshCodeBtn = new Button();
     private final ComboBox<Lang> langCombo = ViewUtil.langCombo();
 
+    // 登录区标签（需随语言切换刷新）
+    private final Label lblUsername = new Label();
+    private final Label lblPassword = new Label();
+    private final Label lblVerifycode = new Label();
+    private final Label lblLang = new Label();
+
     // 注册区
     private final TextField regUserField = new TextField();
     private final PasswordField regPwdField = new PasswordField();
@@ -100,11 +106,11 @@ public class LoginView extends BorderPane implements LangChangeListener {
 
         left.getChildren().addAll(
                 loginTitle,
-                new Label(I18n.t("login.username")), usernameField,
-                new Label(I18n.t("login.password")), passwordField,
-                new Label(I18n.t("login.verifycode")), captchaRow,
+                lblUsername, usernameField,
+                lblPassword, passwordField,
+                lblVerifycode, captchaRow,
                 loginBtn,
-                new HBox(8, new Label(I18n.t("login.lang")), langCombo),
+                new HBox(8, lblLang, langCombo),
                 loginMsg);
         setLeft(left);
     }
@@ -239,6 +245,10 @@ public class LoginView extends BorderPane implements LangChangeListener {
         usernameField.setPromptText(I18n.t("login.username"));
         passwordField.setPromptText(I18n.t("login.password"));
         captchaField.setPromptText(I18n.t("login.verifycode"));
+        lblUsername.setText(I18n.t("login.username"));
+        lblPassword.setText(I18n.t("login.password"));
+        lblVerifycode.setText(I18n.t("login.verifycode"));
+        lblLang.setText(I18n.t("login.lang"));
 
         regUserField.setPromptText(I18n.t("login.username"));
         regPwdField.setPromptText(I18n.t("login.password"));
