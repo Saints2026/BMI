@@ -8,15 +8,7 @@ import com.bmi.i18n.LangChangeListener;
 import com.bmi.model.User;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
-import javafx.scene.control.Accordion;
-import javafx.scene.control.Button;
-import javafx.scene.control.CheckBox;
-import javafx.scene.control.ComboBox;
-import javafx.scene.control.DatePicker;
-import javafx.scene.control.Label;
-import javafx.scene.control.PasswordField;
-import javafx.scene.control.TextField;
-import javafx.scene.control.TitledPane;
+import javafx.scene.control.*;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.VBox;
@@ -26,13 +18,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
 import java.util.function.Consumer;
-import java.util.stream.Collectors;
 
-/**
- * 登录 & 注册页面（对齐 ui_design.md 第二章「LoginView」）。
- * 左：登录区（用户名/密码/本地4位验证码/语言切换）；右：注册折叠面板（账号/基础体质/围度/体征/疾病）。
- * 注册自动计算初始 BMI；重复账号拦截；注册成功提示并返回登录区。
- */
 public class LoginView extends BorderPane implements LangChangeListener {
 
     private final UserController userController;
@@ -48,13 +34,11 @@ public class LoginView extends BorderPane implements LangChangeListener {
     private final Button refreshCodeBtn = new Button();
     private final ComboBox<Lang> langCombo = ViewUtil.langCombo();
 
-    // 登录区标签（需随语言切换刷新）
     private final Label lblUsername = new Label();
     private final Label lblPassword = new Label();
     private final Label lblVerifycode = new Label();
     private final Label lblLang = new Label();
 
-    // 注册区
     private final TextField regUserField = new TextField();
     private final PasswordField regPwdField = new PasswordField();
     private final PasswordField regPwd2Field = new PasswordField();
@@ -120,10 +104,8 @@ public class LoginView extends BorderPane implements LangChangeListener {
         right.setPadding(new Insets(24));
         right.setPrefWidth(360);
 
-        // 账号
         tpAccount = pane("register.account",
                 new VBox(6, regUserField, regPwdField, regPwd2Field));
-        // 基础体质
         regGender.getItems().addAll(I18n.t("input.male"), I18n.t("input.female"));
         regGender.setValue(I18n.t("input.male"));
         regTime.setValue(LocalDate.now());
@@ -131,13 +113,10 @@ public class LoginView extends BorderPane implements LangChangeListener {
         regWeight.textProperty().addListener((o, a, b) -> updateRegBmi());
         VBox basic = new VBox(6, regHeight, regWeight, regAge, regGender, regTime, regBmiLabel);
         tpBasic = pane("register.basic", basic);
-        // 身体围度
         tpCircum = pane("register.circum",
                 new VBox(6, regWaist, regHip, regWrist, regNeck));
-        // 健康指标
         tpVital = pane("register.vital",
                 new VBox(6, regSys, regDia, regHr, regVisc));
-        // 既往疾病
         for (String key : new String[]{"input.disease.hypertension", "input.disease.diabetes",
                 "input.disease.heart", "input.disease.hyperlipid", "input.disease.fattyliver"}) {
             CheckBox cb = new CheckBox(I18n.t(key));
@@ -161,16 +140,15 @@ public class LoginView extends BorderPane implements LangChangeListener {
     private TitledPane pane(String key, javafx.scene.Node content) {
         TitledPane tp = new TitledPane();
         tp.setContent(content);
-        // 标题在 refreshTexts 中设置
         tp.setUserData(key);
         return tp;
     }
 
     private void onDiseaseToggle(CheckBox self, boolean isDisease) {
         if (self.isSelected() && isDisease) {
-            cbNone.setSelected(false); // 选了具体疾病则取消「无」
+            cbNone.setSelected(false);
         } else if (self.isSelected() && !isDisease) {
-            diseaseBoxes.forEach(cb -> cb.setSelected(false)); // 选了「无」则清空具体疾病
+            diseaseBoxes.forEach(cb -> cb.setSelected(false));
         }
     }
 
@@ -192,29 +170,12 @@ public class LoginView extends BorderPane implements LangChangeListener {
     }
 
     private void doLogin() {
-        // [TEST] 临时跳过验证码校验，便于 AI 模块测试
-        // if (!captchaField.getText().trim().equals(captcha)) {
-        //     loginMsg.setText(I18n.t("login.errorCode"));
-        //     loginMsg.setStyle("-fx-text-fill:#f44336;");
-        //     return;
-        // }
-        System.out.println("登录跳过验证码");
-        String u = usernameField.getText().trim();
-        String p = passwordField.getText();
-        if (u.isEmpty() || p.isEmpty()) {
-            loginMsg.setText(I18n.t("login.errorEmpty"));
-            loginMsg.setStyle("-fx-text-fill:#f44336;");
-            return;
-        }
-        User user = userController.login(u, p);
-        if (user != null) {
-            loginMsg.setText(I18n.t("login.success"));
-            loginMsg.setStyle("-fx-text-fill:#4caf50;");
-            onLoginSuccess.accept(user);
-        } else {
-            loginMsg.setText(I18n.t("login.errorEmpty"));
-            loginMsg.setStyle("-fx-text-fill:#f44336;");
-        }
+        // 测试跳过登录
+        System.out.println("登录跳过");
+        User fake = new User();
+        fake.setId(1L);
+        fake.setUsername("test");
+        onLoginSuccess.accept(fake);
     }
 
     private void doRegister() {
@@ -229,12 +190,10 @@ public class LoginView extends BorderPane implements LangChangeListener {
         if (userController.register(u, p1)) {
             regMsg.setText(I18n.t("register.success"));
             regMsg.setStyle("-fx-text-fill:#4caf50;");
-            // 清空并切回登录区（左侧始终可见，仅提示）
             regUserField.clear();
             regPwdField.clear();
             regPwd2Field.clear();
         } else {
-            // 视图校验已通过，失败多为用户名重复（FR-01 重复账号拦截）
             regMsg.setText(I18n.t("register.dupUser"));
             regMsg.setStyle("-fx-text-fill:#f44336;");
         }
@@ -258,7 +217,6 @@ public class LoginView extends BorderPane implements LangChangeListener {
         regBtn.setText(I18n.t("register.submit"));
         regGender.getItems().setAll(I18n.t("input.male"), I18n.t("input.female"));
 
-        // 折叠面板标题（通过字段引用直接设置，避免依赖场景图）
         if (tpAccount != null) {
             tpAccount.setText(I18n.t("register.account"));
             tpBasic.setText(I18n.t("register.basic"));
@@ -266,7 +224,6 @@ public class LoginView extends BorderPane implements LangChangeListener {
             tpVital.setText(I18n.t("register.vital"));
             tpDisease.setText(I18n.t("register.disease"));
         }
-        // 疾病复选框文案
         for (int i = 0; i < diseaseBoxes.size(); i++) {
             String[] keys = {"input.disease.hypertension", "input.disease.diabetes",
                     "input.disease.heart", "input.disease.hyperlipid", "input.disease.fattyliver"};
@@ -278,7 +235,6 @@ public class LoginView extends BorderPane implements LangChangeListener {
     @Override
     public void onLangChange() {
         refreshTexts();
-        // 语言下拉自身随 AppConfig 刷新
         langCombo.setValue(AppConfig.getInstance().getLang());
     }
 }
