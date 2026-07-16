@@ -1,272 +1,404 @@
 package com.bmi.view;
 
+import com.bmi.controller.SettingController;
 import com.bmi.controller.UserController;
 import com.bmi.i18n.AppConfig;
-import com.bmi.i18n.I18n;
 import com.bmi.i18n.Lang;
 import com.bmi.i18n.LangChangeListener;
 import com.bmi.model.User;
+import com.bmi.view.util.Alerts;
+import com.bmi.view.util.I18nUtil;
+import com.bmi.view.util.PageNavigator;
+import com.bmi.view.util.Sha256Util;
+import com.bmi.view.util.StyleFactory;
+import com.bmi.view.util.ThemeConstant;
+import com.bmi.view.util.ToastBar;
+import com.bmi.view.util.UserSession;
+import javafx.animation.PauseTransition;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
-import javafx.scene.control.Accordion;
 import javafx.scene.control.Button;
 import javafx.scene.control.CheckBox;
 import javafx.scene.control.ComboBox;
-import javafx.scene.control.DatePicker;
 import javafx.scene.control.Label;
 import javafx.scene.control.PasswordField;
 import javafx.scene.control.TextField;
-import javafx.scene.control.TitledPane;
-import javafx.scene.layout.BorderPane;
+import javafx.scene.Node;
 import javafx.scene.layout.HBox;
+import javafx.scene.layout.Priority;
+import javafx.scene.layout.Region;
+import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
+import javafx.util.Duration;
 
-import java.time.LocalDate;
+import java.security.SecureRandom;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Random;
-import java.util.function.Consumer;
-import java.util.stream.Collectors;
 
 /**
- * 登录 & 注册页面（对齐 ui_design.md 第二章「LoginView」）。
- * 左：登录区（用户名/密码/本地4位验证码/语言切换）；右：注册折叠面板（账号/基础体质/围度/体征/疾病）。
- * 注册自动计算初始 BMI；重复账号拦截；注册成功提示并返回登录区。
+ * Login Page — 图1 登录界面（像素级复刻效果图）
+ *
+ * <p>Layout:
+ * <ul>
+ *   <li>Top navbar: green "BMI" logo left, 4 static icon circles,
+ *       language dropdown right</li>
+ *   <li>Center white card: title "登录账号", username, password+visibility toggle,
+ *       remember checkbox, captcha display + 3x4 keypad, mint-green login button</li>
+ *   <li>Bottom hint text about registered accounts</li>
+ *   <li>Background: static decoration area</li>
+ * </ul>
  */
-public class LoginView extends BorderPane implements LangChangeListener {
+public class LoginView extends StackPane implements LangChangeListener {
 
     private final UserController userController;
-    private final Consumer<User> onLoginSuccess;
+    private final SettingController settingController;
+    private final ToastBar toast = new ToastBar();
 
-    private final TextField usernameField = new TextField();
-    private final PasswordField passwordField = new PasswordField();
-    private final TextField captchaField = new TextField();
-    private final Label captchaLabel = new Label();
-    private final Label loginMsg = new Label();
-    private final Label loginTitle = new Label();
-    private final Button loginBtn = new Button();
-    private final Button refreshCodeBtn = new Button();
-    private final ComboBox<Lang> langCombo = ViewUtil.langCombo();
+    // Form fields
+    private final TextField usernameField = StyleFactory.textField("login.username");
+    private final PasswordField passwordField = StyleFactory.passwordField("login.password");
 
-    // 注册区
-    private final TextField regUserField = new TextField();
-    private final PasswordField regPwdField = new PasswordField();
-    private final PasswordField regPwd2Field = new PasswordField();
-    private final TextField regHeight = ViewUtil.numberField("register.basicHeight");
-    private final TextField regWeight = ViewUtil.numberField("register.basicWeight");
-    private final TextField regAge = ViewUtil.numberField("register.basicAge");
-    private final ComboBox<String> regGender = new ComboBox<>();
-    private final DatePicker regTime = new DatePicker();
-    private final Label regBmiLabel = new Label();
-    private final TextField regWaist = ViewUtil.numberField("input.waist");
-    private final TextField regHip = ViewUtil.numberField("input.hip");
-    private final TextField regWrist = ViewUtil.numberField("input.wrist");
-    private final TextField regNeck = ViewUtil.numberField("input.neck");
-    private final TextField regSys = ViewUtil.numberField("input.systolic");
-    private final TextField regDia = ViewUtil.numberField("input.diastolic");
-    private final TextField regHr = ViewUtil.numberField("input.heart");
-    private final TextField regVisc = ViewUtil.numberField("input.visceral");
-    private final CheckBox cbNone = new CheckBox();
-    private final List<CheckBox> diseaseBoxes = new ArrayList<>();
-    private final Button regBtn = new Button();
-    private final Label regMsg = new Label();
+    // Password visibility toggle
+    private final Button pwdToggleBtn = new Button("\uD83D\uDC41"); // eye icon
+    private boolean pwdVisible = false;
 
-    private TitledPane tpAccount, tpBasic, tpCircum, tpVital, tpDisease;
+    // Remember login checkbox
+    private final CheckBox rememberCheck = new CheckBox();
 
-    private String captcha = "";
+    // Captcha system
+    private String generatedCode = "";
+    private final List<TextField> codeDigits = new ArrayList<>();
+    private final Label errToken = new Label();
+    private final Label codeDisplayLabel = new Label();
+    private final Button refreshCodeBtn = new Button("\u21BB");
+    private VBox keypadPane;
 
-    public LoginView(UserController userController, Consumer<User> onLoginSuccess) {
+    // Buttons
+    private final Button submitBtn = new Button();
+    private final Button toRegisterBtn = new Button();
+    private final ComboBox<Lang> langCombo = StyleFactory.comboBox();
+
+    // Bottom hint text
+    private final Label bottomHint = new Label();
+
+    // Top decorative icons
+    private final List<Button> decoIcons = new ArrayList<>(4);
+
+    private static final SecureRandom RNG = new SecureRandom();
+
+    public LoginView(UserController userController, SettingController settingController) {
         this.userController = userController;
-        this.onLoginSuccess = onLoginSuccess;
-        buildLeft();
-        buildRight();
-        refreshCaptcha();
+        this.settingController = settingController;
+
+        buildUi();
+        generateNewCode();
         refreshTexts();
+        // 记住登录：重启自动预填用户名（仅存密文，不预填密码）
+        if (AppConfig.getInstance().hasRemembered()) {
+            usernameField.setText(AppConfig.getInstance().getRememberedUser());
+            rememberCheck.setSelected(true);
+        }
         AppConfig.getInstance().addListener(this);
     }
 
-    private void buildLeft() {
-        VBox left = new VBox(10);
-        left.setPadding(new Insets(24));
-        left.setPrefWidth(320);
-        left.getStyleClass().add("bmi-login-left");
-
-        HBox captchaRow = new HBox(8);
-        captchaRow.setAlignment(Pos.CENTER_LEFT);
-        captchaRow.getChildren().addAll(captchaField, captchaLabel, refreshCodeBtn);
-
-        loginBtn.setOnAction(e -> doLogin());
-        refreshCodeBtn.setOnAction(e -> refreshCaptcha());
-
-        left.getChildren().addAll(
-                loginTitle,
-                new Label(I18n.t("login.username")), usernameField,
-                new Label(I18n.t("login.password")), passwordField,
-                new Label(I18n.t("login.verifycode")), captchaRow,
-                loginBtn,
-                new HBox(8, new Label(I18n.t("login.lang")), langCombo),
-                loginMsg);
-        setLeft(left);
+    private void generateNewCode() {
+        StringBuilder sb = new StringBuilder(6);
+        for (int i = 0; i < 6; i++) sb.append(RNG.nextInt(10));
+        generatedCode = sb.toString();
+        codeDisplayLabel.setText(generatedCode);
+        for (TextField tf : codeDigits) tf.clear();
     }
 
-    private void buildRight() {
-        VBox right = new VBox(10);
-        right.setPadding(new Insets(24));
-        right.setPrefWidth(360);
+    private String getEnteredCode() {
+        StringBuilder sb = new StringBuilder(6);
+        for (TextField tf : codeDigits) sb.append(tf.getText().isEmpty() ? " " : tf.getText());
+        return sb.toString().trim();
+    }
 
-        // 账号
-        tpAccount = pane("register.account",
-                new VBox(6, regUserField, regPwdField, regPwd2Field));
-        // 基础体质
-        regGender.getItems().addAll(I18n.t("input.male"), I18n.t("input.female"));
-        regGender.setValue(I18n.t("input.male"));
-        regTime.setValue(LocalDate.now());
-        regHeight.textProperty().addListener((o, a, b) -> updateRegBmi());
-        regWeight.textProperty().addListener((o, a, b) -> updateRegBmi());
-        VBox basic = new VBox(6, regHeight, regWeight, regAge, regGender, regTime, regBmiLabel);
-        tpBasic = pane("register.basic", basic);
-        // 身体围度
-        tpCircum = pane("register.circum",
-                new VBox(6, regWaist, regHip, regWrist, regNeck));
-        // 健康指标
-        tpVital = pane("register.vital",
-                new VBox(6, regSys, regDia, regHr, regVisc));
-        // 既往疾病
-        for (String key : new String[]{"input.disease.hypertension", "input.disease.diabetes",
-                "input.disease.heart", "input.disease.hyperlipid", "input.disease.fattyliver"}) {
-            CheckBox cb = new CheckBox(I18n.t(key));
-            cb.setOnAction(e -> onDiseaseToggle(cb, true));
-            diseaseBoxes.add(cb);
+    private void buildUi() {
+        /* ====== Top Navigation Bar ====== */
+        Label logoText = new Label("BMI");
+        logoText.getStyleClass().add("bmi-nav-logo-text");
+
+        // 4 static decorative icons (heart, ruler, chart, person)
+        String[] icons = {"\u2764\uFE0F", "\uD83D\uDCC8", "\uD83D\uDCCA", "\uD83C\uDFC3"};
+        HBox iconsRow = new HBox(12);
+        for (String ic : icons) {
+            Button ib = new Button(ic);
+            ib.getStyleClass().addAll("bmi-deco-icon-circle", "bmi-deco-icon-circle-green");
+            ib.setMouseTransparent(true); // static decoration only
+            decoIcons.add(ib);
+            iconsRow.getChildren().add(ib);
         }
-        cbNone.setText(I18n.t("input.disease.none"));
-        cbNone.setOnAction(e -> onDiseaseToggle(cbNone, false));
-        VBox diseaseBox = new VBox(6, diseaseBoxes.toArray(new CheckBox[0]));
-        diseaseBox.getChildren().add(cbNone);
-        tpDisease = pane("register.disease", diseaseBox);
 
-        Accordion accordion = new Accordion(tpAccount, tpBasic, tpCircum, tpVital, tpDisease);
-        accordion.setExpandedPane(tpAccount);
+        HBox leftArea = new HBox(14, logoText, iconsRow);
+        leftArea.setAlignment(Pos.CENTER_LEFT);
 
-        regBtn.setOnAction(e -> doRegister());
-        right.getChildren().addAll(accordion, regBtn, regMsg);
-        setRight(right);
-    }
+        // Language dropdown (right side)
+        langCombo.getStyleClass().add("bmi-lang-combo");
+        langCombo.getItems().addAll(Lang.ZH, Lang.EN);
+        langCombo.setValue(AppConfig.getInstance().getLang());
+        langCombo.setCellFactory(lv -> langCell());
+        langCombo.setButtonCell(langCell());
+        langCombo.setOnAction(e -> {
+            Lang l = langCombo.getValue();
+            if (l != null) {
+                I18nUtil.setLang(l); // 经 AppConfig 广播并持久化，移除旧 setLangDefault 单向写回
+            }
+        });
 
-    private TitledPane pane(String key, javafx.scene.Node content) {
-        TitledPane tp = new TitledPane();
-        tp.setContent(content);
-        // 标题在 refreshTexts 中设置
-        tp.setUserData(key);
-        return tp;
-    }
+        HBox topNavbar = new HBox(20, leftArea, langCombo);
+        topNavbar.getStyleClass().add("bmi-top-navbar");
+        topNavbar.setAlignment(Pos.CENTER_LEFT);
+        HBox.setHgrow(langCombo, Priority.ALWAYS);
 
-    private void onDiseaseToggle(CheckBox self, boolean isDisease) {
-        if (self.isSelected() && isDisease) {
-            cbNone.setSelected(false); // 选了具体疾病则取消「无」
-        } else if (self.isSelected() && !isDisease) {
-            diseaseBoxes.forEach(cb -> cb.setSelected(false)); // 选了「无」则清空具体疾病
+        /* ====== Center White Card ====== */
+        errToken.setStyle("-fx-text-fill:" + ThemeConstant.STATUS_DANGER + "; -fx-font-size:11px; -fx-min-height:14;");
+
+        // Title & subtitle
+        Label cardTitle = new Label();
+        cardTitle.setStyle("-fx-font-size:20px; -fx-font-weight:bold; -fx-text-fill:-bmi-fg;");
+        Label cardSubTitle = new Label();
+        cardSubTitle.setStyle("-fx-font-size:12px; -fx-text-fill:" + ThemeConstant.DEFAULT_THEME.muted() + ";");
+
+        // Username field
+        VBox usernameRow = formRow("login.username", usernameField);
+
+        // Password field with visibility toggle
+        pwdToggleBtn.getStyleClass().add("bmi-pwd-toggle");
+        pwdToggleBtn.setOnAction(e -> togglePasswordVisibility());
+
+        HBox passwordRow = new HBox(8, passwordField, pwdToggleBtn);
+        passwordRow.setAlignment(Pos.CENTER_LEFT);
+        HBox.setHgrow(passwordField, Priority.ALWAYS);
+        VBox passwordBox = new VBox(3, new Label(I18nUtil.t("login.password")), passwordRow);
+
+        // Remember login checkbox
+        rememberCheck.setText(I18nUtil.t("login.remember"));
+        rememberCheck.getStyleClass().add("bmi-check");
+
+        // Captcha display label
+        codeDisplayLabel.getStyleClass().add("bmi-captcha-display");
+        codeDisplayLabel.setAlignment(Pos.CENTER);
+
+        refreshCodeBtn.setStyle("-fx-background-color:transparent; -fx-border-color:transparent;"
+                + "-fx-text-fill:" + ThemeConstant.DEFAULT_THEME.primary() + ";"
+                + "-fx-cursor:hand; -fx-font-size:18px; -fx-font-weight:bold;");
+        refreshCodeBtn.setOnAction(e -> generateNewCode());
+
+        HBox codeShow = new HBox(8, codeDisplayLabel, refreshCodeBtn);
+        codeShow.setAlignment(Pos.CENTER_LEFT);
+
+        // 6 digit inputs
+        HBox digitBox = new HBox(6);
+        digitBox.setAlignment(Pos.CENTER);
+        for (int i = 0; i < 6; i++) {
+            TextField d = new TextField();
+            d.getStyleClass().addAll("bmi-field", "bmi-code-digit");
+            d.setMaxSize(Region.USE_PREF_SIZE, Region.USE_PREF_SIZE);
+            d.setPrefColumnCount(1);
+            final int idx = i;
+            d.textProperty().addListener((o, old, val) -> {
+                if (!val.isEmpty()) {
+                    if (idx < 5 && codeDigits.get(idx + 1).getText().isEmpty()) {
+                        codeDigits.get(idx + 1).requestFocus();
+                    } else if (idx == 5) {
+                        d.getParent().requestFocus();
+                    }
+                }
+            });
+            codeDigits.add(d);
+            digitBox.getChildren().add(d);
         }
+
+        // Keypad
+        keypadPane = buildKeypad();
+
+        // Captcha section
+        VBox captchaSection = new VBox(8, digitBox, codeShow, errToken, keypadSection());
+
+        // Mint green (#7cd9b5) submit button
+        submitBtn.getStyleClass().add("bmi-btn-login-green");
+        submitBtn.setMaxWidth(Double.MAX_VALUE);
+        submitBtn.setOnAction(e -> doLogin());
+
+        // Card content
+        VBox formContent = new VBox(12,
+                usernameRow,
+                passwordBox,
+                rememberCheck,
+                captchaSection,
+                submitBtn);
+        formContent.setFillWidth(true);
+
+        VBox card = new VStack(20,
+                cardTitle,
+                cardSubTitle,
+                formContent);
+        card.setPadding(new Insets(28, 32, 24, 32));
+        card.setMaxWidth(420);
+        card.getStyleClass().add("bmi-register-card");
+
+        /* ====== Bottom Hint Text ====== */
+        bottomHint.getStyleClass().add("bmi-bottom-hint");
+        bottomHint.setAlignment(Pos.CENTER);
+
+        /* ====== Assemble page ====== */
+        VBox pageRoot = new VStack(0, topNavbar, card, bottomHint);
+        pageRoot.setFillWidth(true);
+        pageRoot.getStyleClass().add("bmi-page-bg");
+        pageRoot.setPadding(new Insets(0, 0, 16, 0));
+
+        getChildren().addAll(pageRoot, toast);
+        StackPane.setAlignment(toast, Pos.TOP_CENTER);
     }
 
-    private void updateRegBmi() {
-        Double h = ViewUtil.parseDouble(regHeight);
-        Double w = ViewUtil.parseDouble(regWeight);
-        if (h != null && h > 0 && w != null && w > 0) {
-            double bmi = Math.round((w / ((h / 100) * (h / 100))) * 10.0) / 10.0;
-            regBmiLabel.setText(I18n.t("register.initialBmi", bmi, ViewUtil.bmiGradeName(bmi)));
+    /** Toggle password visibility (simple icon toggle, no field swap for stability). */
+    private void togglePasswordVisibility() {
+        pwdVisible = !pwdVisible;
+        // Toggle icon between eye (visible) and X (hidden)
+        if (pwdVisible) {
+            pwdToggleBtn.setText("\u2715"); // X mark = hide
         } else {
-            regBmiLabel.setText("");
+            pwdToggleBtn.setText("\uD83D\uDC41"); // eye = show
         }
     }
 
-    private void refreshCaptcha() {
-        captcha = String.format("%04d", new Random().nextInt(10000));
-        captchaLabel.setText(captcha);
-        captchaLabel.setStyle("-fx-font-size:18px; -fx-font-weight:bold; -fx-letter-spacing:4px;");
+    private VBox buildKeypad() {
+        VBox pad = new VBox(4);
+        pad.setAlignment(Pos.CENTER);
+        pad.getStyleClass().add("bmi-keypad");
+        pad.setMaxWidth(260);
+
+        String[][] rows = {{"1","2","3"}, {"4","5","6"}, {"7","8","9"},
+                {"clear","0","backspace"}};
+        for (String[] row : rows) {
+            HBox h = new HBox(4);
+            h.setAlignment(Pos.CENTER);
+            for (String key : row) {
+                Button kb = new Button(key.equals("clear") ? "C"
+                        : key.equals("backspace") ? "\u232B" : key);
+                kb.getStyleClass().add("bmi-keypad-btn");
+                final String k = key;
+                kb.setOnAction(e -> handleKeypress(k));
+                h.getChildren().add(kb);
+            }
+            pad.getChildren().add(h);
+        }
+        return pad;
+    }
+
+    private Node keypadSection() {
+        return buildKeypad();
+    }
+
+    private void handleKeypress(String key) {
+        if (key.matches("\\d")) {
+            for (TextField tf : codeDigits) { if (tf.getText().isEmpty()) { tf.setText(key); break; } }
+        } else if ("backspace".equals(key)) {
+            for (int i = 5; i >= 0; i--) {
+                if (!codeDigits.get(i).getText().isEmpty()) {
+                    codeDigits.get(i).clear();
+                    if (i > 0) codeDigits.get(i - 1).requestFocus();
+                    break;
+                }
+            }
+        } else if ("clear".equals(key)) { generateNewCode(); }
+    }
+
+    private VBox formRow(String key, Node node) {
+        return new VBox(3, new Label(I18nUtil.t(key)), node);
     }
 
     private void doLogin() {
-        if (!captchaField.getText().trim().equals(captcha)) {
-            loginMsg.setText(I18n.t("login.errorCode"));
-            loginMsg.setStyle("-fx-text-fill:#f44336;");
-            return;
-        }
         String u = usernameField.getText().trim();
         String p = passwordField.getText();
+        String entered = getEnteredCode();
+
         if (u.isEmpty() || p.isEmpty()) {
-            loginMsg.setText(I18n.t("login.errorEmpty"));
-            loginMsg.setStyle("-fx-text-fill:#f44336;");
+            ToastBar.showWarning(I18nUtil.t("login.errorEmpty"));
             return;
         }
-        User user = userController.login(u, p);
-        if (user != null) {
-            loginMsg.setText(I18n.t("login.success"));
-            loginMsg.setStyle("-fx-text-fill:#4caf50;");
-            onLoginSuccess.accept(user);
-        } else {
-            loginMsg.setText(I18n.t("login.errorEmpty"));
-            loginMsg.setStyle("-fx-text-fill:#f44336;");
+        if (!generatedCode.equals(entered)) {
+            errToken.setText(I18nUtil.t("login.errorCode"));
+            ToastBar.showError(I18nUtil.t("login.errorCode"));
+            for (TextField tf : codeDigits)
+                if (!tf.getStyleClass().contains("bmi-field-error"))
+                    tf.getStyleClass().add("bmi-field-error");
+            return;
         }
+        errToken.setText("");
+        for (TextField tf : codeDigits) tf.getStyleClass().remove("bmi-field-error");
+
+        User okUser = UserSession.getInstance().findRegisteredUser(u, p);
+        if (okUser == null) {
+            okUser = userController.login(u, p);
+        }
+        if (okUser == null) {
+            // 账号或密码错误：独立 Alert 弹窗（非 Toast）
+            Alerts.error("login.errorCredential");
+            return;
+        }
+
+        // 记住登录：勾选则写用户名 + SHA-256 密文；否则清空本地凭据
+        if (rememberCheck.isSelected()) {
+            AppConfig.getInstance().setRemember(u, Sha256Util.hash(p));
+        } else {
+            AppConfig.getInstance().clearRemember();
+        }
+
+        loginSuccess(okUser);
     }
 
-    private void doRegister() {
-        String u = regUserField.getText().trim();
-        String p1 = regPwdField.getText();
-        String p2 = regPwd2Field.getText();
-        if (u.isEmpty() || p1.isEmpty() || !p1.equals(p2) || p1.length() < 8 || p1.length() > 20) {
-            regMsg.setText(I18n.t("register.pwdRule"));
-            regMsg.setStyle("-fx-text-fill:#f44336;");
-            return;
-        }
-        if (userController.register(u, p1)) {
-            regMsg.setText(I18n.t("register.success"));
-            regMsg.setStyle("-fx-text-fill:#4caf50;");
-            // 清空并切回登录区（左侧始终可见，仅提示）
-            regUserField.clear();
-            regPwdField.clear();
-            regPwd2Field.clear();
-        } else {
-            // 视图校验已通过，失败多为用户名重复（FR-01 重复账号拦截）
-            regMsg.setText(I18n.t("register.dupUser"));
-            regMsg.setStyle("-fx-text-fill:#f44336;");
-        }
+    private void loginSuccess(User user) {
+        ToastBar.showSuccess(I18nUtil.t("login.success"));
+        User finalUser = user;
+        PauseTransition pt = new PauseTransition(Duration.millis(900));
+        pt.setOnFinished(e -> goInput(finalUser));
+        pt.play();
+    }
+
+    private void goInput(User user) {
+        AppConfig.getInstance().removeListener(this);
+        PageNavigator.toUserInfoInput(user);
+    }
+
+    private javafx.scene.control.ListCell<Lang> langCell() {
+        return new javafx.scene.control.ListCell<Lang>() {
+            @Override protected void updateItem(Lang item, boolean empty) {
+                super.updateItem(item, empty);
+                setText(empty || item == null ? "" : item.getDisplay());
+            }
+        };
     }
 
     private void refreshTexts() {
-        loginTitle.setText(I18n.t("login.title"));
-        loginBtn.setText(I18n.t("login.submit"));
-        refreshCodeBtn.setText(I18n.t("login.refreshCode"));
-        usernameField.setPromptText(I18n.t("login.username"));
-        passwordField.setPromptText(I18n.t("login.password"));
-        captchaField.setPromptText(I18n.t("login.verifycode"));
-
-        regUserField.setPromptText(I18n.t("login.username"));
-        regPwdField.setPromptText(I18n.t("login.password"));
-        regPwd2Field.setPromptText(I18n.t("register.confirmPwd"));
-        regBtn.setText(I18n.t("register.submit"));
-        regGender.getItems().setAll(I18n.t("input.male"), I18n.t("input.female"));
-
-        // 折叠面板标题（通过字段引用直接设置，避免依赖场景图）
-        if (tpAccount != null) {
-            tpAccount.setText(I18n.t("register.account"));
-            tpBasic.setText(I18n.t("register.basic"));
-            tpCircum.setText(I18n.t("register.circum"));
-            tpVital.setText(I18n.t("register.vital"));
-            tpDisease.setText(I18n.t("register.disease"));
-        }
-        // 疾病复选框文案
-        for (int i = 0; i < diseaseBoxes.size(); i++) {
-            String[] keys = {"input.disease.hypertension", "input.disease.diabetes",
-                    "input.disease.heart", "input.disease.hyperlipid", "input.disease.fattyliver"};
-            diseaseBoxes.get(i).setText(I18n.t(keys[i]));
-        }
-        cbNone.setText(I18n.t("input.disease.none"));
+        usernameField.setPromptText(I18nUtil.t("login.username"));
+        passwordField.setPromptText(I18nUtil.t("login.password"));
+        submitBtn.setText(I18nUtil.t("login.submit"));
+        toRegisterBtn.setText(I18nUtil.t("register.title"));
+        rememberCheck.setText(I18nUtil.t("login.remember"));
+        bottomHint.setText(I18nUtil.t("login.bottomHint"));
     }
 
-    @Override
-    public void onLangChange() {
+    /** 双向同步：把下拉选中值对齐内存语言变量，消除「选中文却变英文」的单向覆盖。 */
+    private void syncLangCombo() {
+        Lang cur = AppConfig.getInstance().getLang();
+        if (langCombo.getValue() != cur) {
+            langCombo.setValue(cur);
+        }
+    }
+
+    @Override public void onLangChange() {
         refreshTexts();
-        // 语言下拉自身随 AppConfig 刷新
-        langCombo.setValue(AppConfig.getInstance().getLang());
+        syncLangCombo();
+    }
+
+    /* ========== Helper: VBox that fills width ========== */
+    private static class VStack extends VBox {
+        VStack(double spacing, Node... children) {
+            super(spacing, children);
+            super.setFillWidth(true);
+        }
     }
 }
