@@ -4,6 +4,7 @@ import com.bmi.controller.ChartController;
 import com.bmi.i18n.AppConfig;
 import com.bmi.i18n.I18n;
 import com.bmi.i18n.LangChangeListener;
+import com.bmi.view.util.StyleFactory;
 import com.bmi.model.BodyRecord;
 import com.bmi.model.db.DbException;
 import javafx.geometry.Insets;
@@ -13,6 +14,7 @@ import javafx.scene.chart.XYChart;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
 import javafx.scene.control.ScrollPane;
+import javafx.scene.layout.HBox;
 import javafx.scene.layout.VBox;
 
 import java.util.ArrayList;
@@ -30,7 +32,7 @@ public class ChartView extends VBox implements LangChangeListener {
     private final long userId;
     private final ChartController chartController;
     private final Label statusLabel = new Label();
-    private final Button btnRefresh = new Button();
+    private final Button btnRefresh = StyleFactory.secondaryButton("chart.refresh");
     private final VBox chartArea = new VBox(14);
     private final ScrollPane scroll = new ScrollPane(chartArea);
 
@@ -62,7 +64,7 @@ public class ChartView extends VBox implements LangChangeListener {
         try {
             data = chartController.getTrend(userId);
         } catch (DbException e) {
-            statusLabel.setText("数据读取失败，请检查数据库或稍后重试");
+            statusLabel.setText(I18n.t("chart.error"));
             chartArea.getChildren().clear();
             return;
         }

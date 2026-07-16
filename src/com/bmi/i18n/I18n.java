@@ -1,6 +1,8 @@
 package com.bmi.i18n;
 
 import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
 import java.util.Properties;
 
 /**
@@ -47,7 +49,8 @@ public final class I18n {
         Properties p = new Properties();
         try (InputStream is = I18n.class.getClassLoader().getResourceAsStream("com/bmi/i18n/" + name)) {
             if (is != null) {
-                p.load(is);
+                // 关键：.properties 含中文，必须以 UTF-8 读取，否则默认 ISO-8859-1 会乱码。
+                p.load(new InputStreamReader(is, StandardCharsets.UTF_8));
             }
         } catch (Exception ignored) {
             // 资源缺失不阻断启动，I18n.t 会回退返回 key
